@@ -368,8 +368,8 @@ export const saveUserRegistration = async (userData: any) => {
 
 export const subscribeToCounters = (callback: (data: { buyers: number; suppliers: number; total?: number }) => void) => {
   if (!isFirebaseConfigured) {
-    // Provide some default mock values for display if not configured
-    setTimeout(() => callback({ buyers: 124, suppliers: 852, total: 976 }), 500);
+    // Return 0 if not configured to avoid showing fake data
+    setTimeout(() => callback({ buyers: 0, suppliers: 0, total: 0 }), 500);
     return () => {};
   }
   const counterRef = doc(db, 'stats', 'counters');
