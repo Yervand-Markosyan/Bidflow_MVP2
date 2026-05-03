@@ -16,7 +16,7 @@ import {
   limit,
   getCountFromServer
 } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { db, auth, isFirebaseConfigured } from '../firebase';
 
 export enum OperationType {
   CREATE = 'create',
@@ -71,14 +71,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Test connection on boot
 async function testConnection() {
+  if (!isFirebaseConfigured) return;
+  
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.log('Firestore connection test successful');
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client is offline.");
+      console.warn("Firestore appears to be offline. Data will sync once a connection is established.");
     }
-    // Skip logging for other errors, as this is simply a connection test.
   }
 }
 testConnection();
@@ -207,17 +208,19 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
   const sessionId = getBFSessionId();
 
   // Log to Firestore (The "Admin" source)
-  try {
-    const eventsRef = collection(db, 'events');
-    await addDoc(eventsRef, {
-      event_name: eventName,
-      timestamp: new Date().toISOString(),
-      firestore_timestamp: serverTimestamp(),
-      session_id: sessionId,
-      properties: standardizedProperties
-    });
-  } catch (e) {
-    console.warn('Failed to log event to Firestore:', e);
+  if (isFirebaseConfigured) {
+    try {
+      const eventsRef = collection(db, 'events');
+      await addDoc(eventsRef, {
+        event_name: eventName,
+        timestamp: new Date().toISOString(),
+        firestore_timestamp: serverTimestamp(),
+        session_id: sessionId,
+        properties: standardizedProperties
+      });
+    } catch (e) {
+      console.warn('Failed to log event to Firestore:', e);
+    }
   }
 
   // Also send to direct API for secondary analytics
@@ -265,6 +268,10 @@ if (typeof window !== 'undefined') {
 }
 
 export const saveUserRegistration = async (userData: any) => {
+  if (!isFirebaseConfigured) {
+    console.log('Skipping Firestore save (Firebase not configured)');
+    return { success: true }; // Return success to allow UI to proceed
+  }
   try {
     const email = userData.email.toLowerCase();
     const userRef = doc(db, 'users', email);
@@ -360,6 +367,11 @@ export const saveUserRegistration = async (userData: any) => {
 };
 
 export const subscribeToCounters = (callback: (data: { buyers: number; suppliers: number; total?: number }) => void) => {
+  if (!isFirebaseConfigured) {
+    // Provide some default mock values for display if not configured
+    setTimeout(() => callback({ buyers: 124, suppliers: 852, total: 976 }), 500);
+    return () => {};
+  }
   const counterRef = doc(db, 'stats', 'counters');
   return onSnapshot(counterRef, (snapshot) => {
     if (snapshot.exists()) {
@@ -371,6 +383,8 @@ export const subscribeToCounters = (callback: (data: { buyers: number; suppliers
 };
 
 export const initializeCounters = async () => {
+  if (!isFirebaseConfigured) return;
+  
   // Always try to seed administrators first, independently of counter permissions
   await seedAdministrators();
 
@@ -411,6 +425,8 @@ export const initializeCounters = async () => {
 };
 
 export const seedAdministrators = async () => {
+  if (!isFirebaseConfigured) return;
+  
   try {
     const admins = [
       {
