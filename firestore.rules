@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: events
+    // Fields:
+    //   - event_name: string (required)
+    //   - timestamp: string (required, ISO 8601)
+    //   - firestore_timestamp: timestamp (required)
+    //   - session_id: string (required)
+    //   - properties: map (optional)
+    //
+    // Collection: users
+    // Fields:
+    //   - email: string (required, email format)
+    //   - role: string (required, 'buyer' or 'supplier')
+    //   - timestamp: string (required, ISO 8601)
+    //   - firestore_timestamp: timestamp (required)
+    //   - session_id: string (required)
+    //   - [other optional fields based on role]
+    //
+    // Collection: stats
+    // Document: counters
+    // Fields:
+    //   - buyers: number
+    //   - suppliers: number
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         request.auth.token.email in ["Yer.Markosyan@gmail.com", "anechka.akpoyan95@gmail.com", "shintender.am@gmail.com"]);
+    }
+
+    function isBootstrapAdmin(email) {
+      return email in ["anechka.akpoyan95@gmail.com", "shintender.am@gmail.com", "Yer.Markosyan@gmail.com"];
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /admins/{adminEmail} {
+      // Allow read/create for bootstrap emails even if not logged in yet, to allow seeding
+      allow read, create: if isBootstrapAdmin(adminEmail) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow create: if 
+        request.resource.data.keys().hasAll(['event_name', 'timestamp', 'session_id']) &&
+        request.resource.data.event_name is string &&
+        request.resource.data.event_name.size() < 100 &&
+        request.resource.data.timestamp is string &&
+        request.resource.data.session_id is string;
+      allow read: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // Allow any visitor to create or update a registration document (for robustness)
+      allow read, write: if true;
+    }
+
+    match /stats/counters {
+      // Allow any visitor to read/update counters
+      allow read, write: if true;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

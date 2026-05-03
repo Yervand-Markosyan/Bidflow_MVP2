@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Tracking Event",
+      "description": "An event tracked for analytics purposes.",
+      "type": "object",
+      "properties": {
+        "event_name": { "type": "string", "description": "The name of the event." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO string of when the event occurred." },
+        "firestore_timestamp": { "type": "object", "description": "Server timestamp." },
+        "session_id": { "type": "string", "description": "Unique ID for the user session." },
+        "properties": { 
+          "type": "object", 
+          "properties": {
+            "device": { "type": "string" },
+            "language": { "type": "string" },
+            "url": { "type": "string" },
+            "referrer": { "type": "string" }
+          }
+        }
+      },
+      "required": ["event_name", "timestamp", "session_id"]
+    },
+    "User": {
+      "title": "User Registration",
+      "description": "A user who registered or submitted a demo request.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "code": { "type": "string", "description": "Unique 4-digit code for the user." },
+        "role": { "type": "string", "enum": ["buyer", "supplier"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "firestore_timestamp": { "type": "object" },
+        "session_id": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "string" },
+        "location": { "type": "string" },
+        "companyName": { "type": "string" },
+        "materials": { "type": "array", "items": { "type": "string" } },
+        "city": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "required": ["email", "role", "timestamp"]
+    },
+    "Counter": {
+      "title": "Public Counter",
+      "description": "Aggregated counts for buyers and suppliers.",
+      "type": "object",
+      "properties": {
+        "buyers": { "type": "number" },
+        "suppliers": { "type": "number" }
+      }
+    },
+    "Admin": {
+      "title": "Administrator Account",
+      "description": "Internal account for administrative access.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "password", "role", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "events": {
+      "schema": "Event",
+      "description": "Collection of tracking events."
+    },
+    "users": {
+      "schema": "User",
+      "description": "Collection of registered users and demo requests."
+    },
+    "stats/counters": {
+      "schema": "Counter",
+      "description": "Global counters for the landing page."
+    },
+    "admins": {
+      "schema": "Admin",
+      "description": "List of administrative accounts."
+    }
+  }
+}
