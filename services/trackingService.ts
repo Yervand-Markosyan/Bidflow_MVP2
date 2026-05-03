@@ -16,7 +16,7 @@ import {
   limit,
   getCountFromServer
 } from 'firebase/firestore';
-import { db, auth, isFirebaseConfigured } from '../firebase';
+import { db, auth } from '../firebase';
 
 export enum OperationType {
   CREATE = 'create',
@@ -71,8 +71,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Test connection on boot
 async function testConnection() {
-  if (!isFirebaseConfigured) return;
-  
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.log('Firestore connection test successful');
@@ -208,19 +206,17 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
   const sessionId = getBFSessionId();
 
   // Log to Firestore (The "Admin" source)
-  if (isFirebaseConfigured) {
-    try {
-      const eventsRef = collection(db, 'events');
-      await addDoc(eventsRef, {
-        event_name: eventName,
-        timestamp: new Date().toISOString(),
-        firestore_timestamp: serverTimestamp(),
-        session_id: sessionId,
-        properties: standardizedProperties
-      });
-    } catch (e) {
-      console.warn('Failed to log event to Firestore:', e);
-    }
+  try {
+    const eventsRef = collection(db, 'events');
+    await addDoc(eventsRef, {
+      event_name: eventName,
+      timestamp: new Date().toISOString(),
+      firestore_timestamp: serverTimestamp(),
+      session_id: sessionId,
+      properties: standardizedProperties
+    });
+  } catch (e) {
+    console.warn('Failed to log event to Firestore:', e);
   }
 
   // Also send to direct API for secondary analytics
@@ -268,10 +264,6 @@ if (typeof window !== 'undefined') {
 }
 
 export const saveUserRegistration = async (userData: any) => {
-  if (!isFirebaseConfigured) {
-    console.log('Skipping Firestore save (Firebase not configured)');
-    return { success: true }; // Return success to allow UI to proceed
-  }
   try {
     const email = userData.email.toLowerCase();
     const userRef = doc(db, 'users', email);
@@ -367,24 +359,31 @@ export const saveUserRegistration = async (userData: any) => {
 };
 
 export const subscribeToCounters = (callback: (data: { buyers: number; suppliers: number; total?: number }) => void) => {
-  if (!isFirebaseConfigured) {
-    // Return 0 if not configured to avoid showing fake data
-    setTimeout(() => callback({ buyers: 0, suppliers: 0, total: 0 }), 500);
-    return () => {};
-  }
   const counterRef = doc(db, 'stats', 'counters');
+  
+  // Also try to get a quick actual count from the users collection as a fallback/initial value
+  const usersRef = collection(db, 'users');
+  getCountFromServer(usersRef).then(snapshot => {
+    const total = snapshot.data().count;
+    // We don't know the exact split without more queries, so we set total
+    callback({ buyers: 0, suppliers: 0, total: total });
+  }).catch(err => {
+    console.debug('Fallback count failed (likely permissions):', err);
+  });
+
   return onSnapshot(counterRef, (snapshot) => {
     if (snapshot.exists()) {
       callback(snapshot.data() as { buyers: number; suppliers: number; total?: number });
     }
   }, (error) => {
-    handleFirestoreError(error, OperationType.LIST, 'stats/counters');
+    // If it's a permission error, it might just be a regular user
+    if (error.code !== 'permission-denied') {
+      handleFirestoreError(error, OperationType.LIST, 'stats/counters');
+    }
   });
 };
 
 export const initializeCounters = async () => {
-  if (!isFirebaseConfigured) return;
-  
   // Always try to seed administrators first, independently of counter permissions
   await seedAdministrators();
 
@@ -425,8 +424,6 @@ export const initializeCounters = async () => {
 };
 
 export const seedAdministrators = async () => {
-  if (!isFirebaseConfigured) return;
-  
   try {
     const admins = [
       {
