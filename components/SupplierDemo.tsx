@@ -160,29 +160,25 @@ export const SupplierDemo: React.FC<SupplierDemoProps> = ({ lang, onSubmit }) =>
         }));
         setFormData(prev => ({ ...prev, materials: newMaterials }));
         
-        if (window.bidflow) {
-          window.bidflow.trackSupplier(2, { selected_materials: selectedMaterialNames });
-        }
+        await trackEvent('supplier_materials_selected', { selected_materials: selectedMaterialNames });
       }
       
-      if (step === 2 && window.bidflow) {
-        window.bidflow.trackSupplier(3, { materials_pricing: formData.materials });
+      if (step === 2) {
+        await trackEvent('supplier_pricing_entered', { materials_pricing: formData.materials });
       }
       
-      if (step === 3 && window.bidflow) {
-        window.bidflow.trackSupplier(4, { company_name: formData.companyName, location: formData.city });
+      if (step === 3) {
+        await trackEvent('supplier_company_info_entered', { company_name: formData.companyName, location: formData.city });
       }
       
       setStep(step + 1);
     } else {
-      if (window.bidflow) {
-        window.bidflow.trackSupplier(5, {
+      await trackEvent('supplier_signup_submitted', {
           email: formData.email,
           company_name: formData.companyName,
           location: formData.city,
           supplier_materials: formData.materials
         });
-      }
 
       const result = await saveUserRegistration({
         email: formData.email.toLowerCase(),

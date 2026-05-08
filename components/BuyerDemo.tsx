@@ -128,14 +128,20 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
     setError('');
     
     const nextStep = step + 1;
-    if (window.bidflow) {
-      const data: any = { ...formData };
-      if (step === 1) data.material_category = formData.category || formData.otherCategory;
-      if (step === 2) data.material_quantity = `${formData.quantity} ${formData.unit}`;
-      if (step === 3) data.location = formData.location;
-      
-      window.bidflow.trackBuyer(nextStep, data);
-    }
+    const data: any = { ...formData };
+    if (step === 1) data.material_category = formData.category || formData.otherCategory;
+    if (step === 2) data.material_quantity = `${formData.quantity} ${formData.unit}`;
+    if (step === 3) data.location = formData.location;
+    
+    const events: Record<number, string> = {
+      2: 'material_category_selected',
+      3: 'material_quantity_entered',
+      4: 'project_location_entered',
+    };
+    
+    const eventName = events[nextStep] || 'material_request_step';
+    console.log('BuyerDemo: tracking event', eventName, data);
+    trackEvent(eventName, data);
     
     setStep(s => s + 1);
   };
@@ -145,15 +151,13 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
     e.preventDefault();
     setAlreadyRegistered(false);
     
-    if (window.bidflow) {
-      window.bidflow.trackBuyer(5, {
+    await trackEvent('material_request_submitted', {
         email: formData.email,
         company_name: formData.companyName,
         material_category: formData.category || formData.otherCategory,
         quantity: `${formData.quantity} ${formData.unit}`,
         location: formData.location
-      });
-    }
+    });
 
     const result = await saveUserRegistration({
       email: formData.email.toLowerCase(),
