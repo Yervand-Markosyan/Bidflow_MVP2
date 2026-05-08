@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-DQHPE63XKN"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-DQHPE63XKN');
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bidflow Dubai | Smart Construction Bidding & Procurement</title>
+    <meta name="description" content="Bidflow Dubai is the leading digital platform for construction procurement in the UAE. Streamline bidding, connect with verified suppliers, and optimize your supply chain in minutes.">
+    <meta name="keywords" content="construction procurement Dubai, construction bidding UAE, building materials marketplace, verified suppliers Dubai, construction supply chain software, Bidflow Dubai">
+    <link rel="canonical" href="https://bidflow.ae/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="Bidflow Dubai | The Pulse of UAE Construction Procurement">
+    <meta property="og:description" content="The digital standard for construction bidding in Dubai. Join the priority waitlist for the most efficient procurement platform in the UAE.">
+    <meta property="og:url" content="https://bidflow.ae/">
+    <meta property="og:site_name" content="Bidflow Dubai">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://bidflow.ae/og-image.jpg">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Bidflow Dubai | Smart Construction Procurement">
+    <meta name="twitter:description" content="Streamline your construction bidding process in Dubai. Connect with verified suppliers and save on project costs.">
+    <meta name="twitter:image" content="https://bidflow.ae/og-image.jpg">
+
+    <!-- Structured Data for AEO (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Bidflow Dubai",
+      "url": "https://bidflow.ae",
+      "logo": "https://bidflow.ae/logo.png",
+      "description": "The digital standard for construction bidding and procurement in the UAE.",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Dubai",
+        "addressCountry": "AE"
+      },
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer service",
+        "email": "hello@bidflow.ae"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Bidflow Dubai",
+      "url": "https://bidflow.ae",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://bidflow.ae/search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is Bidflow?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Bidflow is a high-speed digital platform that automates the construction bidding process in the UAE. It bridges the gap between organizations needing materials and verified suppliers capable of providing them."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does construction bidding work on Bidflow?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Buyers post detailed material requirements, verified sellers submit competitive bids, and the platform helps compare them across price, timeline, and history for optimal procurement."
+          }
+        }
+      ]
+    }
+    </script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bidflow Tracking Script -->
+    <script>
+    (function() {
+      const BIDFLOW_API = "https://ais-pre-ntazh4dq53lpfbniqopixv-81264801679.europe-west3.run.app/api/track";
+      const SESSION_START = Date.now();
+      window.SESSION_START = SESSION_START;
+      
+      // Global metrics object with SessionStorage persistence
+      window.bidflow_metrics = {
+        videoStartTime: 0,
+        totalVideoTime: parseFloat(sessionStorage.getItem('bf_video_time') || '0'),
+        maxScroll: parseInt(sessionStorage.getItem('bf_scroll') || '0'),
+        videoElement: null,
+        lang: 'en',
+        lastPos: -1
+      };
+    
+      function track(eventName, properties = {}) {
+        // 1. Force recalculate live metrics
+        const h = document.documentElement;
+        const b = document.body;
+        const st = 'scrollTop';
+        const sh = 'scrollHeight';
+        const currentScrollPercent = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100) || 0;
+        
+        if (currentScrollPercent > window.bidflow_metrics.maxScroll) {
+          window.bidflow_metrics.maxScroll = currentScrollPercent;
+          sessionStorage.setItem('bf_scroll', window.bidflow_metrics.maxScroll);
+        }
+        
+        let liveVideoTime = window.bidflow_metrics.totalVideoTime;
+        if (window.bidflow_metrics.videoStartTime > 0) {
+          liveVideoTime += (Date.now() - window.bidflow_metrics.videoStartTime) / 1000;
+        }
+
+        // 2. Prepare standardized properties (matches trackingService.ts logic)
+        const SESSION_DURATION = Math.floor((Date.now() - SESSION_START) / 1000);
+        const calculatedProperties = {
+          email: properties.email || "",
+          role: properties.role || "",
+          timestamp: new Date().toISOString(),
+          utm_source: getParam('utm_source') || getReferrerSource() || "",
+          utm_campaign: getParam('utm_campaign') || "",
+          utm_medium: getParam('utm_medium') || "",
+          session_duration: SESSION_DURATION,
+          scroll: Math.max(Number(window.bidflow_metrics.maxScroll), Number(properties.scroll || 0)),
+          scroll_depth: Math.max(Number(window.bidflow_metrics.maxScroll), Number(properties.scroll_depth || 0)),
+          video_duration: Math.max(Math.round(liveVideoTime), Number(properties.video_duration || 0)),
+          video_watch_time: Math.max(Math.round(liveVideoTime), Number(properties.video_watch_time || 0)),
+          device: window.innerWidth < 768 ? 'Mobile' : 'Desktop',
+          language: window.bidflow_metrics.lang || properties.language || navigator.language || "en",
+          url: window.location.href,
+          path: window.location.pathname
+        };
+
+        const mergedProperties = { ...calculatedProperties, ...properties };
+
+        // 3. Unify: Prefer Firestore via React's exposed trackEvent, fallback to direct API
+        if (window.bidflow_trackEvent && typeof window.bidflow_trackEvent === 'function') {
+           window.bidflow_trackEvent(eventName, mergedProperties);
+           return; 
+        }
+
+        // Direct API fallback (for early events or if React fails)
+        const event = {
+          event_name: eventName,
+          timestamp: new Date().toISOString(),
+          session_id: getSessionId(),
+          properties: mergedProperties
+        };
+        
+        const payload = JSON.stringify(event);
+        if (navigator.sendBeacon) {
+          try {
+            const blob = new Blob([payload], { type: 'application/json' });
+            if (navigator.sendBeacon(BIDFLOW_API, blob)) return;
+          } catch (e) {}
+        }
+        fetch(BIDFLOW_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+          mode: 'cors',
+          credentials: 'omit'
+        }).catch(() => {});
+      }
+    
+      function getSessionId() {
+        let sid = sessionStorage.getItem('bf_sid');
+        if (!sid) {
+          sid = 's_' + Math.random().toString(36).substr(2, 9);
+          sessionStorage.setItem('bf_sid', sid);
+        }
+        return sid;
+      }
+    
+      function getParam(name) {
+        return new URLSearchParams(window.location.search).get(name);
+      }
+    
+      function getReferrerSource() {
+        const ref = document.referrer;
+        if (!ref) return 'Ուղիղ';
+        if (ref.includes('google.com')) return 'google';
+        if (ref.includes('facebook.com')) return 'facebook';
+        if (ref.includes('instagram.com')) return 'instagram';
+        if (ref.includes('linkedin.com')) return 'linkedin';
+        return 'Organic_Referral';
+      }
+    
+      // Video Tracking - Multi-layer tracking for maximum reliability
+      function startGlobalVideoHeartbeat() {
+        if (window.videoHeartbeatStarted) return;
+        window.videoHeartbeatStarted = true;
+        
+        console.log('Bidflow: Starting global video monitor v2.3 (Persistent & Unified)');
+        
+        // Layer 1: High-frequency heartbeat (500ms)
+        setInterval(() => {
+          const video = document.querySelector('video');
+          if (!video) {
+            flushVideoTime();
+            return;
+          }
+          
+          if (window.bidflow_metrics.videoElement !== video) {
+            window.bidflow_metrics.videoElement = video;
+          }
+
+          const currentPos = video.currentTime;
+          const isMoving = window.bidflow_metrics.lastPos !== currentPos;
+          window.bidflow_metrics.lastPos = currentPos;
+
+          if (video && !video.paused && !video.seeking && (isMoving || video.readyState >= 2)) {
+            if (window.bidflow_metrics.videoStartTime === 0) {
+              window.bidflow_metrics.videoStartTime = Date.now();
+            } else {
+              const now = Date.now();
+              const delta = (now - window.bidflow_metrics.videoStartTime) / 1000;
+              window.bidflow_metrics.totalVideoTime += delta;
+              sessionStorage.setItem('bf_video_time', window.bidflow_metrics.totalVideoTime.toString());
+              window.bidflow_metrics.videoStartTime = now;
+            }
+          } else {
+            flushVideoTime();
+          }
+        }, 500);
+
+        // Layer 2: Periodic Pings (Every 20s) - Firestore logging
+        setInterval(() => {
+          const totalVideo = Math.round(window.bidflow_metrics.totalVideoTime);
+          if (totalVideo > 0) {
+            track('video_ping', { 
+              video_duration: totalVideo,
+              active_watching: window.bidflow_metrics.videoStartTime > 0
+            });
+          }
+        }, 20000);
+
+        // Layer 3: Visibility Change
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') {
+            flushVideoTime();
+            const totalVideo = Math.round(window.bidflow_metrics.totalVideoTime);
+            if (totalVideo > 0) {
+              track('video_tab_hidden', { video_duration: totalVideo });
+            }
+          }
+        });
+
+        function flushVideoTime() {
+          if (window.bidflow_metrics.videoStartTime > 0) {
+            window.bidflow_metrics.totalVideoTime += (Date.now() - window.bidflow_metrics.videoStartTime) / 1000;
+            sessionStorage.setItem('bf_video_time', window.bidflow_metrics.totalVideoTime.toString());
+            window.bidflow_metrics.videoStartTime = 0;
+          }
+        }
+      }
+    
+      // Scroll Tracking
+      function initScrollTracking() {
+        window.addEventListener('scroll', () => {
+          const h = document.documentElement;
+          const b = document.body;
+          const st = 'scrollTop';
+          const sh = 'scrollHeight';
+          const scrollPercent = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100);
+          if (scrollPercent > window.bidflow_metrics.maxScroll) {
+            window.bidflow_metrics.maxScroll = scrollPercent;
+            sessionStorage.setItem('bf_scroll', window.bidflow_metrics.maxScroll);
+          }
+        });
+      }
+    
+      // Initialize systems
+      startGlobalVideoHeartbeat();
+      initScrollTracking();
+
+      // Auto-track page view (Unified)
+      track('script_initialized', { version: '2.3' });
+      // Removed redundant page_view_landing here as App.tsx handles it now via unified trackEvent
+
+      // Final stats on page leave - Consolidated
+      window.addEventListener('beforeunload', () => {
+        // Final video time update
+        if (window.bidflow_metrics.videoStartTime > 0) {
+          window.bidflow_metrics.totalVideoTime += (Date.now() - window.bidflow_metrics.videoStartTime) / 1000;
+          window.bidflow_metrics.videoStartTime = 0;
+        }
+
+        const totalVideo = Math.round(window.bidflow_metrics.totalVideoTime);
+        if (totalVideo > 2) {
+          track('video_watch_time', { 
+            video_duration: totalVideo,
+            watched_real: true 
+          });
+        }
+        
+        if (window.bidflow_metrics.maxScroll > 5) {
+          track('scroll_depth', { 
+            scroll_depth: window.bidflow_metrics.maxScroll, 
+            scroll: window.bidflow_metrics.maxScroll 
+          });
+        }
+
+        const finalDuration = Math.floor((Date.now() - SESSION_START) / 1000);
+        track('session_end', { 
+          duration: finalDuration,
+          duration_segment: finalDuration > 9 ? '>9s' : '<9s',
+          final_scroll: window.bidflow_metrics.maxScroll,
+          final_video: totalVideo
+        });
+      });
+    
+      // Global access for custom events
+      window.bidflow = { 
+        track,
+        getVideoWatchTime: () => {
+          let liveVideoTime = window.bidflow_metrics.totalVideoTime;
+          if (window.bidflow_metrics.videoStartTime > 0) {
+            liveVideoTime += (Date.now() - window.bidflow_metrics.videoStartTime) / 1000;
+          }
+          return Math.round(liveVideoTime);
+        },
+        // Helper for early access
+        trackEarlyAccess: (email, role) => {
+          track('early_access_signup', { email, role });
+        },
+        // Helper for supplier signup
+        trackSupplier: (step, data) => {
+          const events = {
+            1: 'supplier_signup_started',
+            2: 'supplier_materials_selected',
+            3: 'supplier_pricing_entered',
+            4: 'supplier_company_info_entered',
+            5: 'supplier_signup_submitted'
+          };
+          track(events[step] || 'supplier_signup_step', data);
+        },
+        // Helper for buyer request
+        trackBuyer: (step, data) => {
+          const events = {
+            1: 'material_request_started',
+            2: 'material_category_selected',
+            3: 'material_quantity_entered',
+            4: 'project_location_entered',
+            5: 'material_request_submitted'
+          };
+          track(events[step] || 'material_request_step', data);
+        }
+      };
+    })();
+    </script>
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){
+            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+            m[i].l=1*new Date();
+            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=106724195', 'ym');
+
+        ym(106724195, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+    </script>
+    <!-- /Yandex.Metrika counter -->
+
+    <!-- Meta Pixel Code -->
+    <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '1488317776053651');
+    fbq('track', 'PageView');
+    </script>
+    <!-- End Meta Pixel Code -->
+  <script type="module" crossorigin src="/assets/index-BIYrRAC0.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C0Mo0NLN.css">
+</head>
+<body>
+    <!-- Meta Pixel Code (noscript) -->
+    <noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=1488317776053651&ev=PageView&noscript=1"
+    /></noscript>
+    <!-- End Meta Pixel Code -->
+
+    <!-- Yandex.Metrika counter (noscript) -->
+    <noscript><div><img src="https://mc.yandex.ru/watch/106724195" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+    <!-- /Yandex.Metrika counter -->
+    <div class="background-image-container"></div>
+    <div class="mesh-gradient"></div>
+    <div id="root">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #64748b;">
+            Loading Bidflow Dubai...
+        </div>
+    </div>
+</body>
+</html>
