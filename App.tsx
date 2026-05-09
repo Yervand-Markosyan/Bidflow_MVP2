@@ -1,21 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Navbar } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { UserSegments } from './components/UserSegments';
-import { VideoSection } from './components/VideoSection';
-import { Stats } from './components/Stats';
-import { Problem } from './components/Problem';
-import { HowItWorks } from './components/HowItWorks';
-import { BuyerSavings } from './components/BuyerSavings';
-import { SupplierGrowth } from './components/SupplierGrowth';
-import { BuyerDemo } from './components/BuyerDemo';
-import { SupplierDemo } from './components/SupplierDemo';
-import { InterestCounter } from './components/InterestCounter';
-import { FinalCTA } from './components/FinalCTA';
-import { Footer } from './components/Footer';
+import { Routes, Route } from 'react-router-dom';
+import { Home } from './components/Home';
+import { RedirectHandler } from './components/RedirectHandler';
 import { Language, Page } from './types';
-import { trackEvent, saveUserRegistration, subscribeToCounters, initializeCounters, seedAdministrators } from './services/trackingService';
+import { trackEvent, subscribeToCounters, initializeCounters, seedAdministrators } from './services/trackingService';
 
 // App component for Bidflow Dubai
 const App: React.FC = () => {
@@ -100,60 +89,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col selection:bg-yellow-100 relative ${lang === 'ar' ? 'font-arabic' : 'font-sans'}`}>
-      <Navbar 
-        onNavigate={handleNavigate} 
-        currentPage={currentPage} 
-        lang={lang} 
-        onLangChange={setLang} 
-      />
-      
-      <main className="flex-grow">
-        <Hero 
-          lang={lang} 
-          onBuyerClick={() => scrollToSection('buyer-demo')}
-          onSupplierClick={() => scrollToSection('supplier-demo')}
-        />
-        
-        <UserSegments lang={lang} />
-        
-        <VideoSection lang={lang} />
-        
-        <Stats lang={lang} />
-        
-        <Problem lang={lang} />
-        
-        <HowItWorks lang={lang} />
-        
-        <BuyerSavings lang={lang} />
-        
-        <SupplierGrowth lang={lang} />
-        
-        <BuyerDemo 
-          lang={lang} 
-          onSubmit={handleBuyerDemoSubmit} 
-        />
-        
-        <SupplierDemo 
-          lang={lang} 
-          onSubmit={handleSupplierDemoSubmit} 
-        />
-        
-        <InterestCounter 
-          lang={lang} 
-          buyersCount={buyersCount} 
+    <Routes>
+      <Route path="/:shortId" element={<RedirectHandler />} />
+      <Route path="/" element={
+        <Home 
+          lang={lang}
+          setLang={setLang}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          handleNavigate={handleNavigate}
+          handleRegistration={handleRegistration}
+          handleBuyerDemoSubmit={handleBuyerDemoSubmit}
+          handleSupplierDemoSubmit={handleSupplierDemoSubmit}
+          scrollToSection={scrollToSection}
+          buyersCount={buyersCount}
           suppliersCount={suppliersCount}
-          totalCount={totalParticipants} 
+          totalParticipants={totalParticipants}
         />
-        
-        <FinalCTA 
-          lang={lang} 
-          onSubmit={handleRegistration} 
-        />
-      </main>
-
-      <Footer onNavigate={handleNavigate} lang={lang} />
-    </div>
+      } />
+    </Routes>
   );
 };
 

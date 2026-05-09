@@ -207,14 +207,16 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
 
   // Log to Firestore (The "Admin" source)
   try {
+    console.log('Attempting to log event to Firestore:', eventName, sessionId);
     const eventsRef = collection(db, 'events');
-    await addDoc(eventsRef, {
+    const docRef = await addDoc(eventsRef, {
       event_name: eventName,
       timestamp: new Date().toISOString(),
       firestore_timestamp: serverTimestamp(),
       session_id: sessionId,
       properties: standardizedProperties
     });
+    console.log('Event logged to Firestore with ID:', docRef.id);
   } catch (e) {
     console.warn('Failed to log event to Firestore:', e);
   }

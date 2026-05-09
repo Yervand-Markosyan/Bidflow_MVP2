@@ -424,7 +424,13 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
             <div className="w-20 h-20 bg-brand-primary rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-10 h-10 text-brand-slate" />
             </div>
-            <h2 className="text-3xl font-black text-white tracking-tight">{t.success}</h2>
+            <h2 className="text-3xl font-black text-white tracking-tight">
+              {t.success.split(' ').map((word, i) => (
+                <span key={i} className={word.toLowerCase().includes('submitted') ? 'text-white' : ''}>
+                  {word}{' '}
+                </span>
+              ))}
+            </h2>
             <p className="text-slate-400 font-medium text-lg">{t.successMsg}</p>
             <button 
               onClick={() => { setIsSubmitted(false); setStep(1); setFormData({ category: '', otherCategory: '', quantity: '', location: '', email: '', companyName: '', role: 'Buyer / Contractor' }); }}
