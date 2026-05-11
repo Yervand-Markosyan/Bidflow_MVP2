@@ -4,7 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Home } from './components/Home';
 import { RedirectHandler } from './components/RedirectHandler';
 import { Language, Page } from './types';
-import { trackEvent, subscribeToCounters, initializeCounters, seedAdministrators } from './services/trackingService';
+import { trackEvent, subscribeToCounters, initializeCounters, seedAdministrators, initializeCampaign } from './services/trackingService';
 
 // App component for Bidflow Dubai
 const App: React.FC = () => {
@@ -35,10 +35,13 @@ const App: React.FC = () => {
     // 1. Seed administrators immediately (one-time setup)
     seedAdministrators();
 
-    // 2. Track initial page view
+    // 2. Initialize campaign storage
+    initializeCampaign();
+
+    // 3. Track initial page view
     trackEvent('page_view_landing', { language: lang });
 
-    // 3. Initialize counters if they don't exist
+    // 4. Initialize counters if they don't exist
     initializeCounters();
 
     // Subscribe to real-time counters

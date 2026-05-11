@@ -127,6 +127,20 @@ export const getUTMParams = () => {
   return utms;
 };
 
+// Retrieve resolved campaignId from session
+export const getCampaignId = (): string | null => {
+  return sessionStorage.getItem('campaign_id');
+};
+
+// Initialize campaign resolution on app load
+export const initializeCampaign = async () => {
+  const utms = getUTMParams();
+  if (Object.keys(utms).length === 0) return;
+
+  // Potential API call to resolve based on UTMs
+  console.log('Resolving campaign for UTMs:', utms);
+};
+
 const cleanData = (data: any): any => {
   if (data === null || data === undefined) return data;
   if (typeof data !== 'object') return data;
@@ -191,6 +205,7 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
     utm_source: utms.utm_source || "",
     utm_campaign: utms.utm_campaign || "",
     utm_medium: utms.utm_medium || "",
+    campaign_id: getCampaignId() || "",
     session_duration: SESSION_DURATION,
     scroll: Math.max(Math.round(liveScroll), Number(properties.scroll || 0)),
     scroll_depth: Math.max(Math.round(liveScroll), Number(properties.scroll_depth || 0)),
@@ -316,6 +331,7 @@ export const saveUserRegistration = async (userData: any) => {
       timestamp: new Date().toISOString(),
       firestore_timestamp: serverTimestamp(),
       session_id: sessionStorage.getItem('bf_sid') || SESSION_ID,
+      campaign_id: getCampaignId(),
       
       // Standardized properties for dashboard
       utm_source: utms.utm_source || "",
@@ -332,7 +348,7 @@ export const saveUserRegistration = async (userData: any) => {
       path: window.location.pathname
     });
 
-    await setDoc(userRef, data);
+    await setDoc(userRef, data, { merge: true });
     
     // Update public counters
     const counterRef = doc(db, 'stats', 'counters');
