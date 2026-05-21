@@ -167,81 +167,51 @@ const SESSION_START_TIME = typeof window !== 'undefined' ? (window as any).SESSI
 // Helper to get consistent Session ID across all scripts
 const getBFSessionId = () => {
   if (typeof window === 'undefined') return "server";
-  let sid = sessionStorage.getItem('bf_sid');
+  let sid = localStorage.getItem('bf_sid');
   if (!sid) {
-    sid = 's_' + Math.random().toString(36).substr(2, 9);
-    sessionStorage.setItem('bf_sid', sid);
+    // Use crypto.randomUUID if available, otherwise fallback to robust random string
+    sid = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+      ? crypto.randomUUID() 
+      : 's_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('bf_sid', sid);
   }
   return sid;
 };
 
-// ... (cleanData helper remains the same)
-
 export const trackEvent = async (eventName: string, properties: TrackingProperties = {}) => {
-  const SESSION_DURATION = Math.floor((Date.now() - SESSION_START_TIME) / 1000);
-  const utms = getUTMParams();
+  const sessionId = getBFSessionId();
+  const timestamp = new Date().toISOString();
   
-  // Calculate live engagement metrics from unified persistent object
-  let liveScroll = 0;
-  let liveVideo = 0;
-  let siteLang = 'en';
-  
-  if (typeof window !== 'undefined') {
-    const metrics = (window as any).bidflow_metrics;
-    if (metrics) {
-      liveScroll = metrics.maxScroll || 0;
-      liveVideo = metrics.totalVideoTime || 0;
-      siteLang = metrics.lang || 'en';
-      if (metrics.videoStartTime > 0) {
-        liveVideo += (Date.now() - metrics.videoStartTime) / 1000;
-      }
-    }
-  }
-
   const standardizedProperties = {
-    email: properties.email || "",
-    role: properties.role || "",
-    timestamp: new Date().toISOString(),
-    utm_source: utms.utm_source || "",
-    utm_campaign: utms.utm_campaign || "",
-    utm_medium: utms.utm_medium || "",
-    campaign_id: getCampaignId() || "",
-    session_duration: SESSION_DURATION,
-    scroll: Math.max(Math.round(liveScroll), Number(properties.scroll || 0)),
-    scroll_depth: Math.max(Math.round(liveScroll), Number(properties.scroll_depth || 0)),
-    video_duration: Math.max(Math.round(liveVideo), Number(properties.video_duration || 0)),
-    video_watch_time: Math.max(Math.round(liveVideo), Number(properties.video_watch_time || 0)),
+    ...properties,
+    session_duration: Math.floor((Date.now() - SESSION_START_TIME) / 1000),
     device: getDeviceType(),
-    language: siteLang || properties.language || navigator.language || 'en',
     url: window.location.href,
     path: window.location.pathname,
-    ...properties
+    referrer: document.referrer || "",
+    language: properties.language || localStorage.getItem('bidflow_lang') || navigator.language || 'en'
   };
 
-  const sessionId = getBFSessionId();
-
-  // Log to Firestore (The "Admin" source)
+  // Log to Firestore
   try {
-    console.log('Attempting to log event to Firestore:', eventName, sessionId);
     const eventsRef = collection(db, 'events');
-    const docRef = await addDoc(eventsRef, {
-      event_name: eventName,
-      timestamp: new Date().toISOString(),
-      firestore_timestamp: serverTimestamp(),
+    await addDoc(eventsRef, {
       session_id: sessionId,
+      event_name: eventName,
+      timestamp: timestamp,
+      firestore_timestamp: serverTimestamp(),
       properties: standardizedProperties
     });
-    console.log('Event logged to Firestore with ID:', docRef.id);
   } catch (e) {
     console.warn('Failed to log event to Firestore:', e);
   }
 
-  // Also send to direct API for secondary analytics
-  const BIDFLOW_API = 'https://ais-pre-ntazh4dq53lpfbniqopixv-81264801679.europe-west3.run.app/api/track';
+  // Also send to direct API via Navigator.sendBeacon for secondary analytics
+  const BIDFLOW_API = '/api/events';
   const payload = JSON.stringify({
-    event_name: eventName,
-    timestamp: new Date().toISOString(),
     session_id: sessionId,
+    event_name: eventName,
+    timestamp: timestamp,
     properties: standardizedProperties
   });
 
@@ -259,8 +229,46 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
   }
 };
 
-// Simplified Scroll Depth Tracking - Using unified metrics
+export const trackSessionStart = () => {
+  const utms = getUTMParams();
+  const getOS = () => {
+    const userAgent = window.navigator.userAgent;
+    if (userAgent.indexOf("Win") !== -1) return "Windows";
+    if (userAgent.indexOf("Mac") !== -1) return "macOS";
+    if (userAgent.indexOf("X11") !== -1) return "UNIX";
+    if (userAgent.indexOf("Linux") !== -1) return "Linux";
+    if (/Android/.test(userAgent)) return "Android";
+    if (/iPhone|iPad|iPod/.test(userAgent)) return "iOS";
+    return "Unknown";
+  };
+
+  const getBrowser = () => {
+    const ua = navigator.userAgent;
+    if (ua.indexOf("Firefox") > -1) return "Firefox";
+    if (ua.indexOf("Opera") > -1 || ua.indexOf("OPR") > -1) return "Opera";
+    if (ua.indexOf("Trident") > -1) return "Internet Explorer";
+    if (ua.indexOf("Edge") > -1 || ua.indexOf("Edg") > -1) return "Edge";
+    if (ua.indexOf("Chrome") > -1) return "Chrome";
+    if (ua.indexOf("Safari") > -1) return "Safari";
+    return "Unknown";
+  };
+
+  const currentLang = localStorage.getItem('bidflow_lang') || navigator.language || 'en';
+
+  trackEvent('session_start', {
+    user_agent: navigator.userAgent,
+    os: getOS(),
+    browser: getBrowser(),
+    device_type: getDeviceType() === 'Mobile' ? 'Mobile' : (getDeviceType() === 'Tablet' ? 'Mobile' : 'Desktop'),
+    language: currentLang,
+    ...utms,
+    referrer: document.referrer || "direct"
+  });
+};
+
+// Simplified Scroll Depth Tracking - Using unified thresholds
 if (typeof window !== 'undefined') {
+  const trackedThresholds = new Set();
   window.addEventListener('scroll', () => {
     const h = document.documentElement;
     const b = document.body;
@@ -268,16 +276,13 @@ if (typeof window !== 'undefined') {
     const sh = 'scrollHeight';
     const scrollPercent = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100) || 0;
     
-    const metrics = (window as any).bidflow_metrics;
-    if (metrics && scrollPercent > metrics.maxScroll) {
-      metrics.maxScroll = scrollPercent;
-      if (metrics.maxScroll % 25 === 0) {
-        trackEvent('scroll_depth', { depth: metrics.maxScroll });
+    [25, 50, 75, 100].forEach(threshold => {
+      if (scrollPercent >= threshold && !trackedThresholds.has(threshold)) {
+        trackedThresholds.add(threshold);
+        trackEvent('scroll_depth', { percentage: threshold });
       }
-    }
+    });
   });
-
-  // Note: beforeunload session_end is now handled in index.html to avoid duplicate beacons
 }
 
 export const saveUserRegistration = async (userData: any) => {
@@ -330,7 +335,7 @@ export const saveUserRegistration = async (userData: any) => {
       code: uniqueCode,
       timestamp: new Date().toISOString(),
       firestore_timestamp: serverTimestamp(),
-      session_id: sessionStorage.getItem('bf_sid') || SESSION_ID,
+      session_id: localStorage.getItem('bf_sid') || getBFSessionId(),
       campaign_id: getCampaignId(),
       
       // Standardized properties for dashboard
@@ -369,7 +374,7 @@ export const saveUserRegistration = async (userData: any) => {
     }
 
     console.log('User registration saved:', data);
-    return { success: true };
+    return { success: true, code: uniqueCode };
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'users');
     return { success: false, error };

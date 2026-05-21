@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Page, Language } from '../types';
-import { saveUserRegistration } from '../services/trackingService';
+import { saveUserRegistration, trackEvent } from '../services/trackingService';
 
 interface RegistrationFormProps {
   onSubmit: (email: string, role: 'buyer' | 'seller') => void;
@@ -113,6 +113,15 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit, on
     if (result.alreadyExists) {
       setIsAlreadyRegistered(true);
       return;
+    }
+
+    if (result.success) {
+      trackEvent('quick_registration', {
+        email: normalizedEmail,
+        user_code: result.code || '',
+        role: role === 'buyer' ? 'buyer' : 'supplier',
+        registration_type: 'quick'
+      });
     }
 
     onSubmit(email, role);

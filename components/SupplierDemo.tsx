@@ -123,6 +123,16 @@ export const SupplierDemo: React.FC<SupplierDemoProps> = ({ lang, onSubmit }) =>
 
   const [materialError, setMaterialError] = useState(false);
 
+  const [stepStartTime, setStepStartTime] = useState(Date.now());
+
+  React.useEffect(() => {
+    trackEvent('quiz_step_view', {
+      step_index: 1,
+      step_name: t.materialsLabel,
+      role: 'supplier'
+    });
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlreadyRegistered(false);
@@ -145,11 +155,20 @@ export const SupplierDemo: React.FC<SupplierDemoProps> = ({ lang, onSubmit }) =>
     }
 
     if (!hasStarted) {
-      if (window.bidflow) {
-        window.bidflow.trackSupplier(1, { source: 'supplier_demo' });
-      }
       setHasStarted(true);
     }
+
+    const duration = Date.now() - stepStartTime;
+    const currentStepName = step === 1 ? t.materialsLabel : step === 2 ? t.step2Title : step === 3 ? t.step3Title : t.step4Title;
+    
+    trackEvent('quiz_step_complete', {
+        step_index: step,
+        step_name: currentStepName,
+        step_data: formData,
+        duration_ms: duration,
+        role: 'supplier'
+    });
+
     if (step < 4) {
       if (step === 1) {
         // Initialize materials array based on selected names
@@ -159,27 +178,20 @@ export const SupplierDemo: React.FC<SupplierDemoProps> = ({ lang, onSubmit }) =>
           price: ''
         }));
         setFormData(prev => ({ ...prev, materials: newMaterials }));
-        
-        await trackEvent('supplier_materials_selected', { selected_materials: selectedMaterialNames });
       }
       
-      if (step === 2) {
-        await trackEvent('supplier_pricing_entered', { materials_pricing: formData.materials });
-      }
+      const nextStep = step + 1;
+      setStep(nextStep);
+      setStepStartTime(Date.now());
       
-      if (step === 3) {
-        await trackEvent('supplier_company_info_entered', { company_name: formData.companyName, location: formData.city });
-      }
-      
-      setStep(step + 1);
-    } else {
-      await trackEvent('supplier_signup_submitted', {
-          email: formData.email,
-          company_name: formData.companyName,
-          location: formData.city,
-          supplier_materials: formData.materials
-        });
+      const nextStepName = nextStep === 1 ? t.materialsLabel : nextStep === 2 ? t.step2Title : nextStep === 3 ? t.step3Title : t.step4Title;
+      trackEvent('quiz_step_view', {
+          step_index: nextStep,
+          step_name: nextStepName,
+          role: 'supplier'
+      });
 
+    } else {
       const result = await saveUserRegistration({
         email: formData.email.toLowerCase(),
         role: 'supplier',
@@ -188,6 +200,14 @@ export const SupplierDemo: React.FC<SupplierDemoProps> = ({ lang, onSubmit }) =>
         supplier_materials: formData.materials,
         source: 'supplier_demo'
       });
+
+      await trackEvent('quiz_submission', {
+          email: formData.email,
+          user_code: result.code || '', 
+          final_status: 'submitted',
+          role: 'supplier',
+          ...formData
+        });
 
       if (result.alreadyExists) {
         setAlreadyRegistered(true);

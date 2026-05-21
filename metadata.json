@@ -2,5 +2,7 @@
   "name": "Final3 Bidflow MVP1 update ",
   "description": "A minimal, high-conversion landing page for Bidflow Dubai\u0027s launch, featuring email registration for construction procurement.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

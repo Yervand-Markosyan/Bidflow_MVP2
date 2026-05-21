@@ -119,6 +119,16 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
     }
   };
 
+  const [stepStartTime, setStepStartTime] = useState(Date.now());
+
+  React.useEffect(() => {
+    trackEvent('quiz_step_view', {
+      step_index: 1,
+      step_name: t.step1,
+      role: 'buyer'
+    });
+  }, []);
+
   const handleNext = () => {
     startTracking();
     if (step === 2 && !formData.unit) {
@@ -126,37 +136,47 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
       return;
     }
     setError('');
+
+    // Track step completion
+    const duration = Date.now() - stepStartTime;
+    const currentStepName = step === 1 ? t.step1 : step === 2 ? t.step2 : step === 3 ? t.step3 : t.step4;
+    trackEvent('quiz_step_complete', {
+        step_index: step,
+        step_name: currentStepName,
+        step_data: formData,
+        duration_ms: duration,
+        role: 'buyer'
+    });
     
     const nextStep = step + 1;
-    const data: any = { ...formData };
-    if (step === 1) data.material_category = formData.category || formData.otherCategory;
-    if (step === 2) data.material_quantity = `${formData.quantity} ${formData.unit}`;
-    if (step === 3) data.location = formData.location;
-    
-    const events: Record<number, string> = {
-      2: 'material_category_selected',
-      3: 'material_quantity_entered',
-      4: 'project_location_entered',
-    };
-    
-    const eventName = events[nextStep] || 'material_request_step';
-    console.log('BuyerDemo: tracking event', eventName, data);
-    trackEvent(eventName, data);
-    
-    setStep(s => s + 1);
+    setStep(nextStep);
+    setStepStartTime(Date.now());
+
+    // Track new step view
+    const nextStepName = nextStep === 1 ? t.step1 : nextStep === 2 ? t.step2 : nextStep === 3 ? t.step3 : t.step4;
+    trackEvent('quiz_step_view', {
+        step_index: nextStep,
+        step_name: nextStepName,
+        role: 'buyer'
+    });
   };
-  const handleBack = () => setStep(s => s - 1);
+
+  const handleBack = () => {
+    setStep(s => s - 1);
+    setStepStartTime(Date.now());
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAlreadyRegistered(false);
     
-    await trackEvent('material_request_submitted', {
-        email: formData.email,
-        company_name: formData.companyName,
-        material_category: formData.category || formData.otherCategory,
-        quantity: `${formData.quantity} ${formData.unit}`,
-        location: formData.location
+    const duration = Date.now() - stepStartTime;
+    trackEvent('quiz_step_complete', {
+        step_index: 4,
+        step_name: t.step4,
+        step_data: formData,
+        duration_ms: duration,
+        role: 'buyer'
     });
 
     const result = await saveUserRegistration({
@@ -167,6 +187,14 @@ export const BuyerDemo: React.FC<BuyerDemoProps> = ({ lang, onSubmit }) => {
       quantity: `${formData.quantity} ${formData.unit}`,
       location: formData.location,
       source: 'buyer_demo'
+    });
+
+    await trackEvent('quiz_submission', {
+        email: formData.email,
+        user_code: result.code || '', 
+        final_status: 'submitted',
+        role: 'buyer',
+        ...formData
     });
 
     if (result.alreadyExists) {

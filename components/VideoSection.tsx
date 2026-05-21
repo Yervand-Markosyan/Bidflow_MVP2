@@ -14,6 +14,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Language } from '../types';
+import { trackEvent } from '../services/trackingService';
 
 interface VideoSectionProps {
   lang: Language;
@@ -25,6 +26,7 @@ export const VideoSection: React.FC<VideoSectionProps> = ({ lang }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [userHasUnmuted, setUserHasUnmuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [showInitialMute, setShowInitialMute] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -57,6 +59,15 @@ export const VideoSection: React.FC<VideoSectionProps> = ({ lang }) => {
       error: "تعذر تحميل الفيديو. يرجى التحقق من اتصالك بالإنترنت."
     }
   }[lang];
+
+  const videoId = "main-video";
+
+  const trackVideoEvent = (eventName: string) => {
+    trackEvent(eventName, {
+      video_id: videoId,
+      current_time: videoRef.current?.currentTime || 0
+    });
+  };
 
   useEffect(() => {
     const options = {
@@ -108,6 +119,10 @@ export const VideoSection: React.FC<VideoSectionProps> = ({ lang }) => {
             // Start video
             videoRef.current.play().then(() => {
               setIsPlaying(true);
+              if (!hasStarted) {
+                trackVideoEvent('video_start');
+                setHasStarted(true);
+              }
               
               // If user unmuted before, fade in volume
               if (userHasUnmuted) {
@@ -203,9 +218,11 @@ export const VideoSection: React.FC<VideoSectionProps> = ({ lang }) => {
       if (videoRef.current.paused) {
         videoRef.current.play();
         setIsPlaying(true);
+        trackVideoEvent('video_play');
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
+        trackVideoEvent('video_pause');
       }
     }
   };
@@ -342,6 +359,7 @@ export const VideoSection: React.FC<VideoSectionProps> = ({ lang }) => {
                 ) : (
                   <video 
                     ref={videoRef}
+                    onEnded={() => trackVideoEvent('video_complete')}
                     muted 
                     loop 
                     playsInline

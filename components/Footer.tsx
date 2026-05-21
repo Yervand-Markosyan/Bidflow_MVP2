@@ -39,8 +39,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, lang }) => {
     }
   }[lang];
 
-  const handleSocialClick = (platform: 'linkedin' | 'instagram') => {
-    trackEvent(`footer_${platform}_click`, { language: lang });
+  const handleSocialClick = (platform: 'linkedin' | 'instagram', url: string) => {
+    trackEvent('social_click', { 
+      platform_name: platform,
+      target_url: url
+    });
   };
 
   return (
@@ -88,7 +91,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, lang }) => {
                     href="https://www.linkedin.com/company/bidflow%E2%80%A4ae/" 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    onClick={() => handleSocialClick('linkedin')}
+                    onClick={() => handleSocialClick('linkedin', 'https://www.linkedin.com/company/bidflow%E2%80%A4ae/')}
                     className="text-slate-400 hover:text-brand-slate transition-colors"
                   >
                     <span className="text-xs font-bold uppercase tracking-widest">{t.li}</span>
@@ -97,7 +100,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, lang }) => {
                     href="https://www.instagram.com/bidflow.uae" 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    onClick={() => handleSocialClick('instagram')}
+                    onClick={() => handleSocialClick('instagram', 'https://www.instagram.com/bidflow.uae')}
                     className="text-slate-400 hover:text-brand-slate transition-colors"
                   >
                     <span className="text-xs font-bold uppercase tracking-widest">{t.ig}</span>

@@ -4,7 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Home } from './components/Home';
 import { RedirectHandler } from './components/RedirectHandler';
 import { Language, Page } from './types';
-import { trackEvent, subscribeToCounters, initializeCounters, seedAdministrators, initializeCampaign } from './services/trackingService';
+import { trackEvent, subscribeToCounters, initializeCounters, seedAdministrators, initializeCampaign, trackSessionStart } from './services/trackingService';
 
 // App component for Bidflow Dubai
 const App: React.FC = () => {
@@ -17,6 +17,13 @@ const App: React.FC = () => {
       if ((window as any).bidflow_metrics) {
         (window as any).bidflow_metrics.lang = lang;
       }
+      
+      const prevLang = localStorage.getItem('bidflow_lang');
+      if (prevLang && prevLang !== lang) {
+        trackEvent('language_change', { from: prevLang, to: lang });
+      }
+      localStorage.setItem('bidflow_lang', lang);
+
       // Expose trackEvent to global window for index.html scripts
       (window as any).bidflow_trackEvent = trackEvent;
     }
@@ -38,10 +45,13 @@ const App: React.FC = () => {
     // 2. Initialize campaign storage
     initializeCampaign();
 
-    // 3. Track initial page view
+    // 3. Track session start
+    trackSessionStart();
+
+    // 4. Track initial page view
     trackEvent('page_view_landing', { language: lang });
 
-    // 4. Initialize counters if they don't exist
+    // 5. Initialize counters if they don't exist
     initializeCounters();
 
     // Subscribe to real-time counters

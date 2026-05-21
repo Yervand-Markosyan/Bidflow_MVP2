@@ -98,6 +98,15 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ lang, onSubmit }) => {
       return;
     }
 
+    if (result.success) {
+      trackEvent('quick_registration', {
+        email: email.toLowerCase(),
+        user_code: result.code || '',
+        role: role,
+        registration_type: 'quick'
+      });
+    }
+
     onSubmit({ role, email });
     setIsSubmitted(true);
   };
