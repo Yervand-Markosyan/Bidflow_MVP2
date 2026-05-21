@@ -32,7 +32,6 @@ function loadEnv() {
           }
         });
         console.log(`Loaded environment configuration from: ${path.basename(envPath)}`);
-        break;
       } catch (err) {
         console.error(`Failed to load environment file at ${envPath}:`, err);
       }
@@ -86,6 +85,17 @@ async function queryDb(sql: string, params: any[]): Promise<any> {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Enable CORS for external static frontends like bidflow.ae or github pages
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   // Support both typical JSON and sendBeacon plain-text payloads
   app.use(express.json());

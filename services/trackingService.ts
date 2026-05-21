@@ -178,6 +178,18 @@ const getBFSessionId = () => {
   return sid;
 };
 
+// Helper to determine the backend API base dynamically for static/production deployments
+export const getBackendUrl = (endpoint: string): string => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If running under the custom domain (production) or github pages, point to the Cloud Run server URL
+    if (hostname.includes('bidflow.ae') || hostname.includes('github.io')) {
+      return `https://ais-pre-4vvjqe7ietcqy6k3iudib4-81264801679.europe-west3.run.app${endpoint}`;
+    }
+  }
+  return endpoint;
+};
+
 export const trackEvent = async (eventName: string, properties: TrackingProperties = {}) => {
   const sessionId = getBFSessionId();
   const timestamp = new Date().toISOString();
@@ -207,7 +219,7 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
   }
 
   // Also send to direct API via Navigator.sendBeacon for secondary analytics
-  const BIDFLOW_API = '/api/events';
+  const BIDFLOW_API = getBackendUrl('/api/events');
   const payload = JSON.stringify({
     session_id: sessionId,
     event_name: eventName,

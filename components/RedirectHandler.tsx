@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getBackendUrl } from '../services/trackingService';
 
 export const RedirectHandler: React.FC = () => {
     const { shortId } = useParams<{ shortId: string }>();
@@ -13,8 +14,8 @@ export const RedirectHandler: React.FC = () => {
             }
 
             try {
-                // Backend URL needs to be configured, but for now using the requested pattern
-                const response = await fetch(`/api/resolve-url?slug=${shortId}`);
+                // Backend URL is dynamically resolved to point to Active Cloud Run when on custom domain
+                const response = await fetch(getBackendUrl(`/api/resolve-url?slug=${shortId}`));
                 const data = await response.json();
                 
                 if (data.destinationUrl) {
