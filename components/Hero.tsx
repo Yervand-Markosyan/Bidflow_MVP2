@@ -143,7 +143,7 @@ export const Hero: React.FC<HeroProps> = ({ lang, onBuyerClick, onSupplierClick 
                   <div className="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
                 </div>
                 <div className="mx-auto bg-white border border-slate-200 rounded-md px-3 py-1 text-[10px] text-slate-400 w-1/2 text-center">
-                  bidflow.ae/dashboard
+                  www.bidflow.ae/dashboard
                 </div>
               </div>
               
