@@ -299,123 +299,174 @@ if (typeof window !== 'undefined') {
 
 export const saveUserRegistration = async (userData: any) => {
   try {
-    const email = userData.email.toLowerCase();
-    const userRef = doc(db, 'users', email);
+    const email = userData.email.toLowerCase().trim();
+    const utms = getUTMParams();
+    const sessionId = localStorage.getItem('bf_sid') || getBFSessionId();
     
-    // Check if user already exists using the email as ID
-    const userDoc = await getDoc(userRef);
-    if (userDoc.exists()) {
-      console.log('User with this email already exists');
+    // Construct rich payload for MySQL registration API
+    const payload = {
+      email,
+      role: userData.role,
+      name: userData.companyName || userData.company_name || userData.name || email.split('@')[0],
+      source: userData.source || 'early_access',
+      utm_source: utms.utm_source || '',
+      utm_medium: utms.utm_medium || '',
+      utm_campaign: utms.utm_campaign || '',
+      session_id: sessionId
+    };
+
+    const url = getBackendUrl('/api/register');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.alreadyExists) {
+      console.log('User with this email already exists in MariaDB/MySQL');
       return { success: false, alreadyExists: true };
     }
 
-    // Generate unique 4-digit code
-    const uniqueCode = await getUniqueCode();
-
-    const utms = getUTMParams();
-    const SESSION_DURATION = Math.floor((Date.now() - (typeof window !== 'undefined' ? (window as any).SESSION_START || Date.now() : Date.now())) / 1000);
-    
-    // Calculate live engagement metrics
-    let liveScroll = 0;
-    let liveVideo = 0;
-    let siteLang = 'en';
-    if (typeof window !== 'undefined') {
-      const metrics = (window as any).bidflow_metrics;
-      if (metrics) {
-        liveScroll = metrics.maxScroll || 0;
-        liveVideo = metrics.totalVideoTime || 0;
-        siteLang = metrics.lang || 'en';
-        if (metrics.videoStartTime > 0) {
-          liveVideo += (Date.now() - metrics.videoStartTime) / 1000;
-        }
-      } else {
-        const h = document.documentElement;
-        const b = document.body;
-        const st = 'scrollTop';
-        const sh = 'scrollHeight';
-        liveScroll = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100) || 0;
-        
-        if (window.bidflow && typeof window.bidflow.getVideoWatchTime === 'function') {
-          liveVideo = window.bidflow.getVideoWatchTime();
-        }
-      }
-    }
-
-    const data = cleanData({
-      ...userData,
-      email: email, 
-      code: uniqueCode,
-      timestamp: new Date().toISOString(),
-      firestore_timestamp: serverTimestamp(),
-      session_id: localStorage.getItem('bf_sid') || getBFSessionId(),
-      campaign_id: getCampaignId(),
+    if (result.success && result.code) {
+      console.log('User registered successfully in MariaDB/MySQL. Code:', result.code);
       
-      // Standardized properties for dashboard
-      utm_source: utms.utm_source || "",
-      utm_campaign: utms.utm_campaign || "",
-      utm_medium: utms.utm_medium || "",
-      device: getDeviceType(),
-      language: siteLang || navigator.language || 'en',
-      session_duration: SESSION_DURATION,
-      scroll: liveScroll,
-      scroll_depth: liveScroll,
-      video_duration: Math.round(liveVideo),
-      video_watch_time: Math.round(liveVideo),
-      url: window.location.href,
-      path: window.location.pathname
-    });
+      // Keep Firestore in sync too just in case they still browse old dashboards, but do so gracefully
+      try {
+        const userRef = doc(db, 'users', email);
+        const fbData = cleanData({
+          ...userData,
+          email,
+          code: result.code,
+          timestamp: new Date().toISOString(),
+          session_id: sessionId,
+          utm_source: utms.utm_source || "",
+          utm_campaign: utms.utm_campaign || "",
+          utm_medium: utms.utm_medium || ""
+        });
+        await setDoc(userRef, fbData, { merge: true });
+        
+        const counterRef = doc(db, 'stats', 'counters');
+        const roleKey = userData.role === 'buyer' ? 'buyers' : 'suppliers';
+        await updateDoc(counterRef, {
+          [roleKey]: increment(1),
+          total: increment(1)
+        }).catch(async () => {
+          await setDoc(counterRef, {
+            buyers: userData.role === 'buyer' ? 1 : 0,
+            suppliers: userData.role === 'supplier' ? 1 : 0,
+            total: 1
+          }, { merge: true });
+        });
+      } catch (fbErr) {
+        console.debug('Firestore optional write skipped or failed:', fbErr);
+      }
 
-    await setDoc(userRef, data, { merge: true });
-    
-    // Update public counters
-    const counterRef = doc(db, 'stats', 'counters');
-    const roleKey = userData.role === 'buyer' ? 'buyers' : 'suppliers';
-    
-    try {
-      await updateDoc(counterRef, {
-        [roleKey]: increment(1),
-        total: increment(1)
-      });
-    } catch (e) {
-      // If document doesn't exist, create it
-      await setDoc(counterRef, {
-        buyers: userData.role === 'buyer' ? 1 : 0,
-        suppliers: userData.role === 'supplier' ? 1 : 0,
-        total: 1
-      }, { merge: true });
+      return { success: true, code: result.code };
     }
-
-    console.log('User registration saved:', data);
-    return { success: true, code: uniqueCode };
+    
+    return { success: false, error: 'Registration rejected by database' };
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'users');
-    return { success: false, error };
+    console.error('Error saving user registration in MySQL API:', error);
+    console.log('Falling back to Firestore direct registration...');
+    
+    // Fallback to Firestore direct registration if database API is offline
+    try {
+      const email = userData.email.toLowerCase();
+      const userRef = doc(db, 'users', email);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        return { success: false, alreadyExists: true };
+      }
+      
+      const uniqueCode = await getUniqueCode();
+      const utms = getUTMParams();
+      const fbData = cleanData({
+        ...userData,
+        email,
+        code: uniqueCode,
+        timestamp: new Date().toISOString(),
+        session_id: localStorage.getItem('bf_sid') || getBFSessionId(),
+        utm_source: utms.utm_source || "",
+        utm_campaign: utms.utm_campaign || "",
+        utm_medium: utms.utm_medium || ""
+      });
+      await setDoc(userRef, fbData, { merge: true });
+      return { success: true, code: uniqueCode };
+    } catch (fbErr) {
+      console.error('Firestore fallback failed:', fbErr);
+      return { success: false, error };
+    }
   }
 };
 
 export const subscribeToCounters = (callback: (data: { buyers: number; suppliers: number; total?: number }) => void) => {
-  const counterRef = doc(db, 'stats', 'counters');
-  
-  // Also try to get a quick actual count from the users collection as a fallback/initial value
-  const usersRef = collection(db, 'users');
-  getCountFromServer(usersRef).then(snapshot => {
-    const total = snapshot.data().count;
-    // We don't know the exact split without more queries, so we set total
-    callback({ buyers: 0, suppliers: 0, total: total });
-  }).catch(err => {
-    console.debug('Fallback count failed (likely permissions):', err);
+  let isStopped = false;
+  let intervalId: any = null;
+
+  const fetchLiveCounters = async () => {
+    try {
+      const url = getBackendUrl('/api/counters');
+      const response = await fetch(url);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && !isStopped) {
+          callback({
+            buyers: result.buyers || 0,
+            suppliers: result.suppliers || 0,
+            total: result.total || 0
+          });
+          return true;
+        }
+      }
+    } catch (err) {
+      console.debug('Failed to fetch MariaDB counters, falling back to Firestore subscription:', err);
+    }
+    return false;
+  };
+
+  // Run immediately on page load
+  fetchLiveCounters().then((apiSucceeded) => {
+    if (apiSucceeded) {
+      // Set up simple polling every 8 seconds to keep counts live and fresh
+      intervalId = setInterval(() => {
+        if (!isStopped) fetchLiveCounters();
+      }, 8000);
+    } else {
+      // API call failed, fall back to Firestore direct subscription
+      const counterRef = doc(db, 'stats', 'counters');
+      const unsubscribe = onSnapshot(counterRef, (snapshot) => {
+        if (snapshot.exists() && !isStopped) {
+          callback(snapshot.data() as { buyers: number; suppliers: number; total?: number });
+        }
+      }, (error) => {
+        if (error.code !== 'permission-denied') {
+          console.warn('Firestore subscription failed:', error);
+        }
+      });
+      
+      intervalId = unsubscribe;
+    }
   });
 
-  return onSnapshot(counterRef, (snapshot) => {
-    if (snapshot.exists()) {
-      callback(snapshot.data() as { buyers: number; suppliers: number; total?: number });
+  // Return unsubscribe cleanup handler
+  return () => {
+    isStopped = true;
+    if (intervalId) {
+      if (typeof intervalId === 'function') {
+        intervalId(); // Unsubscribe direct Firestore hook
+      } else {
+        clearInterval(intervalId); // Clear polling interval
+      }
     }
-  }, (error) => {
-    // If it's a permission error, it might just be a regular user
-    if (error.code !== 'permission-denied') {
-      handleFirestoreError(error, OperationType.LIST, 'stats/counters');
-    }
-  });
+  };
 };
 
 export const initializeCounters = async () => {

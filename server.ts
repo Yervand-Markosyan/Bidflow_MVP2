@@ -82,7 +82,93 @@ async function queryDb(sql: string, params: any[]): Promise<any> {
   }
 }
 
+// Auto-create database tables if they do not exist matching our schema
+async function ensureTablesExist() {
+  if (!pool) return;
+  try {
+    console.log('Ensuring MariaDB/MySQL database schema tables exist...');
+    
+    // 1. users table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        email VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255),
+        user_code INT,
+        role VARCHAR(50),
+        platform VARCHAR(255),
+        source VARCHAR(255),
+        utm_source VARCHAR(255),
+        utm_medium VARCHAR(255),
+        utm_campaign VARCHAR(255),
+        registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 2. sessions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id VARCHAR(255) PRIMARY KEY,
+        platform_id VARCHAR(255),
+        campaign_id VARCHAR(255),
+        language VARCHAR(50),
+        device_type VARCHAR(50),
+        os VARCHAR(50),
+        browser VARCHAR(50),
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        utm_source VARCHAR(255),
+        utm_medium VARCHAR(255),
+        utm_campaign VARCHAR(255),
+        utm_content VARCHAR(255),
+        utm_term VARCHAR(255),
+        referrer TEXT,
+        duration_seconds INT DEFAULT 0,
+        max_scroll_depth INT DEFAULT 0,
+        video_watch_time INT DEFAULT 0,
+        is_registered TINYINT DEFAULT 0,
+        user_code VARCHAR(50),
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 3. events table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        event_name VARCHAR(255),
+        session_id VARCHAR(255),
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        properties JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 4. quiz_steps table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS quiz_steps (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(255),
+        step_index INT,
+        step_name VARCHAR(255),
+        role VARCHAR(50),
+        step_data JSON,
+        duration_ms INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    console.log('MariaDB/MySQL tables verified/created successfully.');
+  } catch (err) {
+    console.error('Error ensuring database tables exist:', err);
+  }
+}
+
 async function startServer() {
+  // Run DB setup on start
+  await ensureTablesExist();
+
   const app = express();
   const PORT = 3000;
 
@@ -111,9 +197,170 @@ async function startServer() {
     next();
   });
 
+  // Diagnostic endpoint to test database connection live
+  app.get('/api/db-test', async (req, res) => {
+    try {
+      if (!pool) {
+        return res.status(500).json({
+          success: false,
+          error: 'MySQL/MariaDB connection pool is not initialized. Key environment variables (DB_HOST, DB_PASS) are missing.',
+          dbConfig: {
+            host: process.env.DB_HOST || null,
+            database: process.env.DB_NAME || null,
+            user: process.env.DB_USER || null,
+            port: process.env.DB_PORT || null,
+            hasPassword: !!process.env.DB_PASS
+          }
+        });
+      }
+      
+      // Attempt a simple query execution
+      const [rows] = await pool.query('SELECT 1 as val');
+      return res.json({
+        success: true,
+        message: 'Successfully connected and executed query (SELECT 1)!',
+        results: rows
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err.message || String(err),
+        stack: err.stack,
+        dbConfig: {
+          host: process.env.DB_HOST || null,
+          database: process.env.DB_NAME || null,
+          user: process.env.DB_USER || null,
+          port: process.env.DB_PORT || null,
+          hasPassword: !!process.env.DB_PASS
+        }
+      });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', databaseConnected: !!pool });
+    res.json({ 
+      status: 'ok', 
+      databaseConnected: !!pool,
+      dbConfig: {
+        host: process.env.DB_HOST || null,
+        database: process.env.DB_NAME || null,
+        user: process.env.DB_USER || null,
+        port: process.env.DB_PORT || null,
+        hasPassword: !!process.env.DB_PASS
+      }
+    });
+  });
+
+  // Get real-time buyer/supplier counters from MariaDB/MySQL
+  app.get('/api/counters', async (req, res) => {
+    try {
+      if (!pool) {
+        return res.json({ success: true, buyers: 0, suppliers: 0, total: 0 });
+      }
+      
+      const [buyerRows]: any = await pool.query("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'buyer'");
+      const [supplierRows]: any = await pool.query("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'supplier'");
+      
+      const buyers = buyerRows[0]?.count || 0;
+      const suppliers = supplierRows[0]?.count || 0;
+      
+      return res.json({
+        success: true,
+        buyers,
+        suppliers,
+        total: buyers + suppliers
+      });
+    } catch (err: any) {
+      console.error('Error fetching counters from MariaDB/MySQL:', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // Save User Registration directly into MariaDB/MySQL
+  app.post('/api/register', async (req, res) => {
+    const { email, role, name, source, utm_source, utm_medium, utm_campaign, session_id } = req.body || {};
+    
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const roleFormatted = role?.toLowerCase() === 'buyer' ? 'Buyer' : (role?.toLowerCase() === 'supplier' ? 'Supplier' : (role || 'Buyer'));
+
+    try {
+      if (!pool) {
+        return res.status(500).json({ success: false, error: 'Database connection pool is not initialized' });
+      }
+
+      // 1. Check if user already exists
+      const [existingUsers]: any = await pool.query('SELECT email FROM users WHERE email = ?', [normalizedEmail]);
+      if (existingUsers && existingUsers.length > 0) {
+        return res.json({ success: false, alreadyExists: true });
+      }
+
+      // 2. Generate unique 4-digit user code
+      let uniqueCode = 0;
+      let isUnique = false;
+      let attempts = 0;
+
+      while (!isUnique && attempts < 10) {
+        const candidate = Math.floor(1000 + Math.random() * 9000);
+        const [rows]: any = await pool.query('SELECT user_code FROM users WHERE user_code = ?', [candidate]);
+        if (!rows || rows.length === 0) {
+          uniqueCode = candidate;
+          isUnique = true;
+        }
+        attempts++;
+      }
+
+      if (!uniqueCode) {
+        uniqueCode = Math.floor(1000 + Math.random() * 9000);
+      }
+
+      // 3. Save user registration details
+      const companyName = name || normalizedEmail.split('@')[0];
+      const platform = utm_source || 'direct';
+
+      const userInsertSql = `
+        INSERT INTO users (email, name, user_code, role, platform, source, utm_source, utm_medium, utm_campaign, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE 
+          name = VALUES(name),
+          user_code = VALUES(user_code),
+          role = VALUES(role),
+          registration_date = CURRENT_TIMESTAMP
+      `;
+
+      await pool.query(userInsertSql, [
+        normalizedEmail,
+        companyName,
+        uniqueCode,
+        roleFormatted,
+        platform,
+        source || 'early_access',
+        utm_source || null,
+        utm_medium || null,
+        utm_campaign || null
+      ]);
+
+      // 4. Update session status in sessions table if session_id is provided
+      if (session_id) {
+        try {
+          await pool.query(
+            `UPDATE sessions SET is_registered = 1, user_code = ? WHERE id = ?`,
+            [String(uniqueCode), session_id]
+          );
+        } catch (sessErr) {
+          console.error('Session update warning in /api/register:', sessErr);
+        }
+      }
+
+      return res.json({ success: true, code: String(uniqueCode) });
+    } catch (err: any) {
+      console.error('Error saving user registration in MariaDB/MySQL:', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
   });
 
   // Centralized tracking receiver endpoint
