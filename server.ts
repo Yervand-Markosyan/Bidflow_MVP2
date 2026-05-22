@@ -183,11 +183,13 @@ async function startServer() {
     next();
   });
 
-  // Support both typical JSON and sendBeacon plain-text payloads
-  app.use(express.json());
-  app.use(express.text({ type: 'application/json' }));
+  // Support both typical JSON and sendBeacon plain-text payloads with no stream conflict
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.text({ type: 'text/*', limit: '10mb' }));
   app.use((req, res, next) => {
-    if (typeof req.body === 'string' && req.body) {
+    // If body is a string (e.g. sent via text/plain Beacon or fallback text)
+    if (typeof req.body === 'string' && req.body.trim()) {
       try {
         req.body = JSON.parse(req.body);
       } catch (err) {
@@ -279,23 +281,36 @@ async function startServer() {
 
   // Save User Registration directly into MariaDB/MySQL
   app.post('/api/register', async (req, res) => {
+    console.log('----------------------------------------------------');
+    console.log('Received registration request. Method:', req.method, 'Headers Content-Type:', req.headers['content-type']);
+    console.log('Parsed Request Body:', req.body);
+    
     const { email, role, name, source, utm_source, utm_medium, utm_campaign, session_id } = req.body || {};
     
     if (!email) {
+      console.warn('Registration failed: Email parameter is missing in request body.');
+      console.log('----------------------------------------------------');
       return res.status(400).json({ success: false, error: 'Email is required' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
     const roleFormatted = role?.toLowerCase() === 'buyer' ? 'Buyer' : (role?.toLowerCase() === 'supplier' ? 'Supplier' : (role || 'Buyer'));
 
+    console.log(`Processing registration for email: [${normalizedEmail}], role: [${roleFormatted}]`);
+
     try {
       if (!pool) {
+        console.error('Registration aborted: Database connection pool (pool) is null.');
+        console.log('----------------------------------------------------');
         return res.status(500).json({ success: false, error: 'Database connection pool is not initialized' });
       }
 
       // 1. Check if user already exists
+      console.log(`Checking if email [${normalizedEmail}] already exists in table 'users'...`);
       const [existingUsers]: any = await pool.query('SELECT email FROM users WHERE email = ?', [normalizedEmail]);
       if (existingUsers && existingUsers.length > 0) {
+        console.log(`User [${normalizedEmail}] already exists in database. Aborting insert.`);
+        console.log('----------------------------------------------------');
         return res.json({ success: false, alreadyExists: true });
       }
 
@@ -317,6 +332,7 @@ async function startServer() {
       if (!uniqueCode) {
         uniqueCode = Math.floor(1000 + Math.random() * 9000);
       }
+      console.log(`Generated unique 4-digit code [${uniqueCode}] (attempts: ${attempts})`);
 
       // 3. Save user registration details
       const companyName = name || normalizedEmail.split('@')[0];
@@ -332,6 +348,7 @@ async function startServer() {
           registration_date = CURRENT_TIMESTAMP
       `;
 
+      console.log(`Inserting/Updating users table for: [${normalizedEmail}]...`);
       await pool.query(userInsertSql, [
         normalizedEmail,
         companyName,
@@ -343,22 +360,28 @@ async function startServer() {
         utm_medium || null,
         utm_campaign || null
       ]);
+      console.log(`Successfully saved user [${normalizedEmail}] with code [${uniqueCode}] to database!`);
 
       // 4. Update session status in sessions table if session_id is provided
       if (session_id) {
         try {
+          console.log(`Updating session [${session_id}] status in sessions table...`);
           await pool.query(
             `UPDATE sessions SET is_registered = 1, user_code = ? WHERE id = ?`,
             [String(uniqueCode), session_id]
           );
+          console.log(`Session [${session_id}] successfully marked as registered.`);
         } catch (sessErr) {
           console.error('Session update warning in /api/register:', sessErr);
         }
       }
 
+      console.log(`Registration completed successfully for [${normalizedEmail}].`);
+      console.log('----------------------------------------------------');
       return res.json({ success: true, code: String(uniqueCode) });
     } catch (err: any) {
-      console.error('Error saving user registration in MariaDB/MySQL:', err);
+      console.error('CRITICAL Error saving user registration in MariaDB/MySQL:', err);
+      console.log('----------------------------------------------------');
       return res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });
