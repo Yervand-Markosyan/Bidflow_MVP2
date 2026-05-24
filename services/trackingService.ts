@@ -182,15 +182,14 @@ const getBFSessionId = () => {
 export const getBackendUrl = (endpoint: string): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // If not running directly inside the local dev or the Cloud Run container environments,
-    // we route the APIs to the active production Cloud Run backend service.
     const isLocalOrContainer = 
       hostname === 'localhost' || 
       hostname === '127.0.0.1' || 
       hostname.includes('run.app');
       
     if (!isLocalOrContainer) {
-      return `https://ais-pre-4vvjqe7ietcqy6k3iudib4-81264801679.europe-west3.run.app${endpoint}`;
+      // Points directly to Plesk persistent Node.js API subdomain
+      return `https://api.bidflow.ae${endpoint}`;
     }
   }
   return endpoint;
