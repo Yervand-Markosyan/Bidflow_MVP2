@@ -209,19 +209,18 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
     language: properties.language || localStorage.getItem('bidflow_lang') || navigator.language || 'en'
   };
 
-  // Log to Firestore
-  try {
-    const eventsRef = collection(db, 'events');
-    await addDoc(eventsRef, {
-      session_id: sessionId,
-      event_name: eventName,
-      timestamp: timestamp,
-      firestore_timestamp: serverTimestamp(),
-      properties: standardizedProperties
-    });
-  } catch (e) {
-    console.warn('Failed to log event to Firestore:', e);
-  }
+  // Log to Firestore asynchronously in background so it never blocks client execution
+  const eventsRef = collection(db, 'events');
+  addDoc(eventsRef, {
+    session_id: sessionId,
+    event_name: eventName,
+    timestamp: timestamp,
+    firestore_timestamp: serverTimestamp(),
+    properties: standardizedProperties
+  }).catch((e) => {
+    console.warn('Optional Firestore event tracking write skipped or failed:', e);
+  });
+
 
   // Also send to direct API via Navigator.sendBeacon for secondary analytics
   const BIDFLOW_API = getBackendUrl('/api/events');
@@ -343,36 +342,39 @@ export const saveUserRegistration = async (userData: any) => {
     if (result.success && result.code) {
       console.log('User registered successfully in MariaDB/MySQL. Code:', result.code);
       
-      // Keep Firestore in sync too just in case they still browse old dashboards, but do so gracefully
-      try {
-        const userRef = doc(db, 'users', email);
-        const fbData = cleanData({
-          ...userData,
-          email,
-          code: result.code,
-          timestamp: new Date().toISOString(),
-          session_id: sessionId,
-          utm_source: utms.utm_source || "",
-          utm_campaign: utms.utm_campaign || "",
-          utm_medium: utms.utm_medium || ""
-        });
-        await setDoc(userRef, fbData, { merge: true });
-        
-        const counterRef = doc(db, 'stats', 'counters');
-        const roleKey = userData.role === 'buyer' ? 'buyers' : 'suppliers';
-        await updateDoc(counterRef, {
-          [roleKey]: increment(1),
-          total: increment(1)
-        }).catch(async () => {
-          await setDoc(counterRef, {
-            buyers: userData.role === 'buyer' ? 1 : 0,
-            suppliers: userData.role === 'supplier' ? 1 : 0,
-            total: 1
-          }, { merge: true });
-        });
-      } catch (fbErr) {
-        console.debug('Firestore optional write skipped or failed:', fbErr);
-      }
+      // Keep Firestore in sync too just in case they still browse old dashboards,
+      // but do so asynchronously in the background so it never blocks the registration flow.
+      (async () => {
+        try {
+          const userRef = doc(db, 'users', email);
+          const fbData = cleanData({
+            ...userData,
+            email,
+            code: result.code,
+            timestamp: new Date().toISOString(),
+            session_id: sessionId,
+            utm_source: utms.utm_source || "",
+            utm_campaign: utms.utm_campaign || "",
+            utm_medium: utms.utm_medium || ""
+          });
+          await setDoc(userRef, fbData, { merge: true });
+          
+          const counterRef = doc(db, 'stats', 'counters');
+          const roleKey = userData.role === 'buyer' ? 'buyers' : 'suppliers';
+          await updateDoc(counterRef, {
+            [roleKey]: increment(1),
+            total: increment(1)
+          }).catch(async () => {
+            await setDoc(counterRef, {
+              buyers: userData.role === 'buyer' ? 1 : 0,
+              suppliers: userData.role === 'supplier' ? 1 : 0,
+              total: 1
+            }, { merge: true });
+          });
+        } catch (fbErr) {
+          console.debug('Firestore optional write skipped or failed:', fbErr);
+        }
+      })();
 
       return { success: true, code: result.code };
     }

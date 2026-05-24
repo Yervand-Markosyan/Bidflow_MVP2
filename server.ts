@@ -4,6 +4,45 @@ import fs from 'fs';
 import mysql from 'mysql2/promise';
 import { createServer as createViteServer } from 'vite';
 
+// Setup file logging to debug Plesk runtime
+function setupFileLogging() {
+  const logPath = path.join(process.cwd(), 'server_log.txt');
+  const originalLog = console.log;
+  const originalWarn = console.warn;
+  const originalError = console.error;
+
+  const logToFile = (level: string, ...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ');
+    const formatted = `[${timestamp}] [${level}] ${message}\n`;
+    try {
+      fs.appendFileSync(logPath, formatted);
+    } catch (e) {
+      // Ignore
+    }
+  };
+
+  console.log = (...args: any[]) => {
+    originalLog(...args);
+    logToFile('INFO', ...args);
+  };
+
+  console.warn = (...args: any[]) => {
+    originalWarn(...args);
+    logToFile('WARN', ...args);
+  };
+
+  console.error = (...args: any[]) => {
+    originalError(...args);
+    logToFile('ERROR', ...args);
+  };
+
+  console.log('--- File Logging Initialized (Server Starting) ---');
+  console.log(`Current Working Directory: ${process.cwd()}`);
+}
+
+setupFileLogging();
+
 // Manually parse .env or .env.example if environment variables are not set
 function loadEnv() {
   const possiblePaths = [
@@ -26,7 +65,8 @@ function loadEnv() {
             if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
               value = value.substring(1, value.length - 1);
             }
-            if (!process.env[key]) {
+            // Overwrite if empty or not set
+            if (!process.env[key] || process.env[key].trim() === '') {
               process.env[key] = value;
             }
           }
@@ -236,6 +276,32 @@ async function startServer() {
           hasPassword: !!process.env.DB_PASS
         }
       });
+    }
+  });
+
+  // Endpoint to view server logs for easy debugging
+  app.get('/api/server-logs', (req, res) => {
+    const logPath = path.join(process.cwd(), 'server_log.txt');
+    if (!fs.existsSync(logPath)) {
+      return res.setHeader('Content-Type', 'text/plain; charset=utf-8').send('No logs recorded yet.');
+    }
+    try {
+      const logs = fs.readFileSync(logPath, 'utf8');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(logs);
+    } catch (err: any) {
+      return res.status(500).setHeader('Content-Type', 'text/plain; charset=utf-8').send(`Error reading logs: ${err.message}`);
+    }
+  });
+
+  // Endpoint to clear server logs
+  app.get('/api/server-logs/clear', (req, res) => {
+    const logPath = path.join(process.cwd(), 'server_log.txt');
+    try {
+      fs.writeFileSync(logPath, `[${new Date().toISOString()}] Logs cleared by request.\n`);
+      return res.setHeader('Content-Type', 'text/plain; charset=utf-8').send('Logs cleared successfully.');
+    } catch (err: any) {
+      return res.status(500).setHeader('Content-Type', 'text/plain; charset=utf-8').send(`Error clearing logs: ${err.message}`);
     }
   });
 
