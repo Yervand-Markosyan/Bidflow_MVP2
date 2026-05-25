@@ -1,11 +1,11 @@
-// Plesk Plain-Text Installer and Deployment Restorer (CommonJS)
+// Startup entry point and deployment restorer for Plesk Node.js integration (CommonJS)
 const fs = require('fs');
-const { execSync } = require('child_process');
 const path = require('path');
+const { execSync } = require('child_process');
 
-const logFile = 'deploy_log.txt';
+const logFile = path.join(process.cwd(), 'server_log.txt');
 function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  const line = `[${new Date().toISOString()}] [Plesk app_installer.js] ${msg}\n`;
   try {
     fs.appendFileSync(logFile, line);
   } catch (e) {}
@@ -14,9 +14,7 @@ function log(msg) {
 
 process.on('uncaughtException', (err) => {
   log(`UNCAUGHT EXCEPTION: ${err.message}`);
-  if (err.stack) {
-    log(err.stack);
-  }
+  if (err.stack) log(err.stack);
   process.exit(1);
 });
 
@@ -28,52 +26,71 @@ process.on('unhandledRejection', (reason) => {
   process.exit(1);
 });
 
-log('Starting Plesk automated deployment installer. Node.js version: ' + process.version);
+log("Starting Bidflow backend startup bridge... Node.js version: " + process.version);
 
+// 1. Self-healing Automated Deployment / Restorer
 try {
-  const base64File = 'bidflow_plesk_deploy.zip.base64';
-  const zipFile = 'bidflow_plesk_deploy.zip';
+  const base64File = path.join(process.cwd(), 'bidflow_plesk_deploy.zip.base64');
+  const zipFile = path.join(process.cwd(), 'bidflow_plesk_deploy.zip');
 
   if (fs.existsSync(base64File)) {
-    log(`Found ${base64File}. Decoding to binary ZIP...`);
+    log(`New deployment package detected in base64. Restoring...`);
     const base64Data = fs.readFileSync(base64File, 'utf8').trim();
-    const binaryBuffer = Buffer.from(base64Data, 'base64');
-    
-    fs.writeFileSync(zipFile, binaryBuffer);
-    log(`Successfully decoded to binary ${zipFile}. File size: ${binaryBuffer.length} bytes.`);
+    if (base64Data.length > 100) {
+      const binaryBuffer = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(zipFile, binaryBuffer);
+      log(`Decoded ZIP package (${binaryBuffer.length} bytes). Unzipping...`);
 
-    log('Running system unzip to extract files...');
-    execSync(`unzip -o ${zipFile}`, { stdio: 'inherit' });
-    log('System unzip completed successfully!');
+      // Attempt to extract using system unzip
+      try {
+        execSync(`unzip -o "${zipFile}"`, { stdio: 'inherit', cwd: process.cwd() });
+        log("System unzip completed successfully.");
+      } catch (unzipErr) {
+        log(`System unzip failed: ${unzipErr.message}. Attempting JS fallback via adm-zip...`);
+        try {
+          const AdmZip = require('adm-zip');
+          const zip = new AdmZip(zipFile);
+          zip.extractAllTo(process.cwd(), true);
+          log("JS fallback unzip completed successfully.");
+        } catch (jsUnzipErr) {
+          log(`CRITICAL: JS fallback unzip also failed: ${jsUnzipErr.message}`);
+          throw jsUnzipErr;
+        }
+      }
 
-    log('Cleaning up temporary setup files...');
-    if (fs.existsSync(zipFile)) fs.unlinkSync(zipFile);
-    if (fs.existsSync(base64File)) fs.unlinkSync(base64File);
-    log('Cleanup done.');
-
-    log('Deployment extraction completed successfully! Overwrote server and static files.');
-  } else {
-    log('No base64 deployment package found. Proceeding with regular boot.');
-  }
-
-  if (fs.existsSync('dist/server.cjs')) {
-    log('Booting Bidflow production backend server...');
-    try {
-      require('./dist/server.cjs');
-      log('Require of server.cjs resolved successfully.');
-    } catch (err) {
-      log(`CRITICAL: Failed to require/load server.cjs inside installer: ${err.message}`);
-      if (err.stack) log(err.stack);
-      process.exit(1);
+      // Cleanup to prevent infinite unzip loops on next restarts
+      try {
+        if (fs.existsSync(zipFile)) fs.unlinkSync(zipFile);
+        if (fs.existsSync(base64File)) fs.unlinkSync(base64File);
+        log("Temporary zip and base64 installation files cleaned up successfully.");
+      } catch (cleanupErr) {
+        log(`Warning: Failed to cleanup install files: ${cleanupErr.message}`);
+      }
+    } else {
+      log("Found base64 file but it is empty or invalid. Skipping extraction.");
     }
   } else {
-    log('Error: dist/server.cjs not found! Cannot start server.');
+    log("No new deployment package base64 file found. Skipping extraction.");
   }
+} catch (deployError) {
+  log(`CRITICAL DEPLOYMENT RESTORE ERROR: ${deployError.message}`);
+  if (deployError.stack) log(deployError.stack);
+  // Continue to start the app anyway as dist might already exist
+}
 
-} catch (error) {
-  log(`CRITICAL ERROR DURING DEPLOYMENT INSTALLATION: ${error.message}`);
-  if (error.stack) {
-    log(error.stack);
+// 2. Boot the actual compiled server
+const serverPath = path.join(process.cwd(), 'dist', 'server.cjs');
+if (fs.existsSync(serverPath)) {
+  log("Booting compiled production backend server...");
+  try {
+    require(serverPath);
+    log("Server required successfully.");
+  } catch (err) {
+    log(`CRITICAL: Failed to load server.cjs: ${err.message}`);
+    if (err.stack) log(err.stack);
+    process.exit(1);
   }
+} else {
+  log(`CRITICAL ERROR: Compiled server file not found at: ${serverPath}`);
   process.exit(1);
 }
