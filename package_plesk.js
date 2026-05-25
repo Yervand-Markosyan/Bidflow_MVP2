@@ -1,6 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import AdmZip from 'adm-zip';
+const fs = require('fs');
+const path = require('path');
+const AdmZip = require('adm-zip');
 
 console.log('--- Packaging Plesk Deployment Bundle ---');
 
