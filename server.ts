@@ -2,11 +2,13 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import mysql from 'mysql2/promise';
-import { createServer as createViteServer } from 'vite';
+
+// Calculate correct application root directory dynamically to support both tsx dev and bundled server.cjs on Plesk/Passenger
+const APP_ROOT = __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
 
 // Setup file logging to debug Plesk runtime
 function setupFileLogging() {
-  const logPath = path.join(process.cwd(), 'server_log.txt');
+  const logPath = path.join(APP_ROOT, 'server_log.txt');
   const originalLog = console.log;
   const originalWarn = console.warn;
   const originalError = console.error;
@@ -39,6 +41,7 @@ function setupFileLogging() {
 
   console.log('--- File Logging Initialized (Server Starting) ---');
   console.log(`Current Working Directory: ${process.cwd()}`);
+  console.log(`Resolved APP_ROOT Path: ${APP_ROOT}`);
 }
 
 setupFileLogging();
@@ -46,8 +49,8 @@ setupFileLogging();
 // Manually parse .env or .env.example if environment variables are not set
 function loadEnv() {
   const possiblePaths = [
-    path.join(process.cwd(), '.env'),
-    path.join(process.cwd(), '.env.example')
+    path.join(APP_ROOT, '.env'),
+    path.join(APP_ROOT, '.env.example')
   ];
 
   for (const envPath of possiblePaths) {
@@ -286,7 +289,7 @@ async function startServer() {
 
   // Endpoint to view server logs for easy debugging
   app.get('/api/server-logs', (req, res) => {
-    const logPath = path.join(process.cwd(), 'server_log.txt');
+    const logPath = path.join(APP_ROOT, 'server_log.txt');
     if (!fs.existsSync(logPath)) {
       return res.setHeader('Content-Type', 'text/plain; charset=utf-8').send('No logs recorded yet.');
     }
@@ -301,7 +304,7 @@ async function startServer() {
 
   // Endpoint to clear server logs
   app.get('/api/server-logs/clear', (req, res) => {
-    const logPath = path.join(process.cwd(), 'server_log.txt');
+    const logPath = path.join(APP_ROOT, 'server_log.txt');
     try {
       fs.writeFileSync(logPath, `[${new Date().toISOString()}] Logs cleared by request.\n`);
       return res.setHeader('Content-Type', 'text/plain; charset=utf-8').send('Logs cleared successfully.');
@@ -608,13 +611,14 @@ async function startServer() {
 
   // Serve static assets or fallback to index.html using Vite development or production mode
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(APP_ROOT, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
