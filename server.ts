@@ -210,7 +210,12 @@ async function startServer() {
   await ensureTablesExist();
 
   const app = express();
-  const PORT = 3000;
+  
+  // Passenger in Plesk sets process.env.PORT to a Unix domain socket path or port.
+  // We parse it dynamically to support both socket path (string) and container port (number) modes.
+  const rawPort = process.env.PORT || '3000';
+  const isPipe = isNaN(Number(rawPort));
+  const PORT = isPipe ? rawPort : Number(rawPort);
 
   // Enable CORS for external static frontends like bidflow.ae or github pages
   app.use((req, res, next) => {
@@ -616,9 +621,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is booting! Listening on http://0.0.0.0:${PORT}`);
-  });
+  if (isPipe) {
+    app.listen(PORT, () => {
+      console.log(`Server is booting! Listening on Passenger named pipe/socket: [${PORT}]`);
+    });
+  } else {
+    app.listen(PORT as number, '0.0.0.0', () => {
+      console.log(`Server is booting! Listening on port: [${PORT}] on host 0.0.0.0`);
+    });
+  }
 }
 
 startServer();
