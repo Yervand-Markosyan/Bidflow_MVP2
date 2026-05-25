@@ -1,6 +1,6 @@
-// Startup entry point for Plesk Node.js integration (CommonJS)
-const fs = require('fs');
-const path = require('path');
+// Startup entry point for Plesk Node.js integration (ES Module)
+import fs from 'fs';
+import path from 'path';
 
 const logFile = path.join(process.cwd(), 'server_log.txt');
 function log(msg) {
@@ -25,14 +25,15 @@ process.on('unhandledRejection', (reason) => {
   process.exit(1);
 });
 
-log("Starting Bidflow backend server via Plesk app.js startup bridge...");
+log("Starting Bidflow backend server via Plesk app.js startup bridge. Node.js version: " + process.version);
 
-try {
-  // Since dist/server.cjs is CJS, we can require it directly and synchronously!
-  require('./dist/server.cjs');
-  log("Bidflow server.cjs required successfully.");
-} catch (err) {
-  log(`CRITICAL: Failed to require server.cjs: ${err.message}`);
-  if (err.stack) log(err.stack);
-  process.exit(1);
-}
+// Since dist/server.cjs is compiled, we load it via ESM dynamic import
+import('./dist/server.cjs')
+  .then(() => {
+    log("Bidflow server.cjs imported successfully.");
+  })
+  .catch((err) => {
+    log(`CRITICAL: Failed to import server.cjs: ${err.message}`);
+    if (err.stack) log(err.stack);
+    process.exit(1);
+  });

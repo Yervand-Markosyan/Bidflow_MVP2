@@ -1,7 +1,7 @@
-// Plesk Plain-Text Installer and Deployment Restorer (CommonJS)
-const fs = require('fs');
-const { execSync } = require('child_process');
-const path = require('path');
+// Plesk Plain-Text Installer and Deployment Restorer (ES Module)
+import fs from 'fs';
+import { execSync } from 'child_process';
+import path from 'path';
 
 const logFile = 'deploy_log.txt';
 function log(msg) {
@@ -28,7 +28,7 @@ process.on('unhandledRejection', (reason) => {
   process.exit(1);
 });
 
-log('Starting Plesk automated deployment installer...');
+log('Starting Plesk automated deployment installer. Node.js version: ' + process.version);
 
 try {
   const base64File = 'bidflow_plesk_deploy.zip.base64';
@@ -58,8 +58,15 @@ try {
 
   if (fs.existsSync('dist/server.cjs')) {
     log('Booting Bidflow production backend server...');
-    require('./dist/server.cjs');
-    log('Require of server.cjs resolved successfully.');
+    import('./dist/server.cjs')
+      .then(() => {
+        log('Import of server.cjs resolved successfully.');
+      })
+      .catch((err) => {
+        log(`CRITICAL: Failed to import server.cjs inside installer: ${err.message}`);
+        if (err.stack) log(err.stack);
+        process.exit(1);
+      });
   } else {
     log('Error: dist/server.cjs not found! Cannot start server.');
   }
