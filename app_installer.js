@@ -7,9 +7,28 @@ import path from 'path';
 const logFile = 'deploy_log.txt';
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
-  fs.appendFileSync(logFile, line);
+  try {
+    fs.appendFileSync(logFile, line);
+  } catch (e) {}
   console.log(msg);
 }
+
+// Trap any uncaught exceptions/rejections to write to deploy_log.txt so users can see the exact cause
+process.on('uncaughtException', (err) => {
+  log(`UNCAUGHT EXCEPTION: ${err.message}`);
+  if (err.stack) {
+    log(err.stack);
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : '';
+  log(`UNHANDLED REJECTION: ${msg}`);
+  if (stack) log(stack);
+  process.exit(1);
+});
 
 log('Starting Plesk automated deployment installer...');
 
@@ -41,10 +60,11 @@ try {
     log('No base64 deployment package found. Proceeding with regular boot.');
   }
 
-  // Double check if dist/server.cjs exists, then run it
+  // Double check if dist/server.cjs exists, then run it using top-level await to catch import/boot crashes
   if (fs.existsSync('dist/server.cjs')) {
     log('Booting Bidflow production backend server...');
-    import('./dist/server.cjs');
+    await import('./dist/server.cjs');
+    log('Dynamic import of server.cjs resolved successfully.');
   } else {
     log('Error: dist/server.cjs not found! Cannot start server.');
   }
