@@ -1,8 +1,7 @@
-// Plesk Plain-Text Installer and Deployment Restorer
-// This script is 100% plain text, preventing binary download corruption when transferring to Plesk.
-import fs from 'fs';
-import { execSync } from 'child_process';
-import path from 'path';
+// Plesk Plain-Text Installer and Deployment Restorer (CommonJS)
+const fs = require('fs');
+const { execSync } = require('child_process');
+const path = require('path');
 
 const logFile = 'deploy_log.txt';
 function log(msg) {
@@ -13,7 +12,6 @@ function log(msg) {
   console.log(msg);
 }
 
-// Trap any uncaught exceptions/rejections to write to deploy_log.txt so users can see the exact cause
 process.on('uncaughtException', (err) => {
   log(`UNCAUGHT EXCEPTION: ${err.message}`);
   if (err.stack) {
@@ -45,11 +43,9 @@ try {
     log(`Successfully decoded to binary ${zipFile}. File size: ${binaryBuffer.length} bytes.`);
 
     log('Running system unzip to extract files...');
-    // -o forces overwriting of existing files without prompt
     execSync(`unzip -o ${zipFile}`, { stdio: 'inherit' });
     log('System unzip completed successfully!');
 
-    // Cleanup to prevent running installer again on next restart
     log('Cleaning up temporary setup files...');
     if (fs.existsSync(zipFile)) fs.unlinkSync(zipFile);
     if (fs.existsSync(base64File)) fs.unlinkSync(base64File);
@@ -60,11 +56,10 @@ try {
     log('No base64 deployment package found. Proceeding with regular boot.');
   }
 
-  // Double check if dist/server.cjs exists, then run it using top-level await to catch import/boot crashes
   if (fs.existsSync('dist/server.cjs')) {
     log('Booting Bidflow production backend server...');
-    await import('./dist/server.cjs');
-    log('Dynamic import of server.cjs resolved successfully.');
+    require('./dist/server.cjs');
+    log('Require of server.cjs resolved successfully.');
   } else {
     log('Error: dist/server.cjs not found! Cannot start server.');
   }
