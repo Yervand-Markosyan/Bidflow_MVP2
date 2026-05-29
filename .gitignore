@@ -27,3 +27,7 @@ server_log.txt
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+.env
+.env*.local
