@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import mysql from 'mysql2/promise';
 
 // Calculate correct application root directory dynamically to support both tsx dev and bundled server.cjs on Plesk/Passenger
 const APP_ROOT = __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
@@ -98,22 +97,34 @@ const dbConfig = {
   keepAliveInitialDelay: 10000
 };
 
-// Create a MySQL/MariaDB connection pool only if DB_HOST is present
-let pool: mysql.Pool | null = null;
+// Create a MySQL/MariaDB connection pool dynamically only if DB_HOST is present
+let pool: any = null;
+let databaseInitPromise: Promise<void> | null = null;
 
-if (dbConfig.host && dbConfig.password) {
-  try {
-    pool = mysql.createPool(dbConfig);
-    console.log('Connecting to MariaDB pool initialized for host:', dbConfig.host);
-  } catch (err) {
-    console.error('Failed to initialize MariaDB pool:', err);
-  }
-} else {
-  console.warn('Database environment variables (DB_HOST, DB_PASS) are missing. MariaDB connection is inactive.');
+async function initDatabasePool() {
+  if (databaseInitPromise) return databaseInitPromise;
+  
+  databaseInitPromise = (async () => {
+    if (dbConfig.host && dbConfig.password) {
+      try {
+        console.log('Dynamically importing mysql2/promise for host:', dbConfig.host);
+        const mysql = await import('mysql2/promise');
+        pool = mysql.createPool(dbConfig);
+        console.log('Connecting to MariaDB pool initialized dynamically.');
+      } catch (err: any) {
+        console.error('Failed to initialize MariaDB pool dynamically:', err.message || err);
+      }
+    } else {
+      console.warn('Database environment variables (DB_HOST, DB_PASS) are missing. MariaDB connection will remain inactive.');
+    }
+  })();
+  
+  return databaseInitPromise;
 }
 
 // Function to safely execute DB queries with auto-retry or graceful error handling
 async function queryDb(sql: string, params: any[]): Promise<any> {
+  await initDatabasePool();
   if (!pool) {
     throw new Error('Database connection pool is not initialized');
   }
@@ -128,7 +139,11 @@ async function queryDb(sql: string, params: any[]): Promise<any> {
 
 // Auto-create database tables if they do not exist matching our schema
 async function ensureTablesExist() {
-  if (!pool) return;
+  await initDatabasePool();
+  if (!pool) {
+    console.log('Skipping table existence verification (MariaDB is inactive/disabled).');
+    return;
+  }
   try {
     console.log('Ensuring MariaDB/MySQL database schema tables exist...');
     
@@ -177,19 +192,19 @@ async function ensureTablesExist() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 3. events table
+    // 3. events table - Using LONGTEXT instead of JSON for backward compatibility with older MariaDB < 10.2.7
     await pool.query(`
       CREATE TABLE IF NOT EXISTS events (
         id INT AUTO_INCREMENT PRIMARY KEY,
         event_name VARCHAR(255),
         session_id VARCHAR(255),
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        properties JSON,
+        properties LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 4. quiz_steps table
+    // 4. quiz_steps table - Using LONGTEXT instead of JSON for backward compatibility with older MariaDB < 10.2.7
     await pool.query(`
       CREATE TABLE IF NOT EXISTS quiz_steps (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -197,15 +212,15 @@ async function ensureTablesExist() {
         step_index INT,
         step_name VARCHAR(255),
         role VARCHAR(50),
-        step_data JSON,
+        step_data LONGTEXT,
         duration_ms INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
     console.log('MariaDB/MySQL tables verified/created successfully.');
-  } catch (err) {
-    console.error('Error ensuring database tables exist:', err);
+  } catch (err: any) {
+    console.error('Error ensuring database tables exist:', err.message || err);
   }
 }
 
@@ -613,15 +628,28 @@ async function startServer() {
   });
 
   // Serve static assets or fallback to index.html using Vite development or production mode
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  const distPath = path.join(APP_ROOT, 'dist');
+  const isProductionMode = fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (!isProductionMode) {
+    try {
+      console.log('Detected development mode (dist/index.html not found). Initializing Vite middleware...');
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+      console.log('Vite development server middleware loaded.');
+    } catch (viteErr: any) {
+      console.warn('Vite package load failed, falling back to static production mode:', viteErr.message || viteErr);
+      app.use(express.static(distPath));
+      app.get(/^\/(?!api).*/, (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   } else {
-    const distPath = path.join(APP_ROOT, 'dist');
+    console.log('Detected production mode (dist/index.html exists). Serving static files inside dist/');
     app.use(express.static(distPath));
     app.get(/^\/(?!api).*/, (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
