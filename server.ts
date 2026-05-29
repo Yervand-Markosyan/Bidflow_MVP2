@@ -93,6 +93,7 @@ const dbConfig = {
   password: process.env.DB_PASS,
   port: parseInt(process.env.DB_PORT || '3306', 10),
   connectionLimit: 10,
+  connectTimeout: 10000, // 10s connection timeout to prevent hanging the process and crashing Plesk Passenger on boot
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000
 };
@@ -209,8 +210,10 @@ async function ensureTablesExist() {
 }
 
 async function startServer() {
-  // Run DB setup on start
-  await ensureTablesExist();
+  // Run DB setup in the background to prevent blocking/hanging Passenger startup
+  ensureTablesExist().catch(err => {
+    console.error('Database tables background verification failed:', err);
+  });
 
   const app = express();
   

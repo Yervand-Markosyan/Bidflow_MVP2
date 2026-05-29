@@ -95,6 +95,76 @@ if (!fs.existsSync(nodeModulesPath)) {
   }
 }
 
+function serveDiagnosticPage(bootError) {
+  log("Starting fallback HTTP diagnostic server to report the boot failure...");
+  try {
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      
+      let logsHtml = '';
+      try {
+        if (fs.existsSync(logFile)) {
+          const fileContent = fs.readFileSync(logFile, 'utf8');
+          // Escape HTML characters
+          const escapedContent = fileContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          logsHtml = `<pre style="background:#f1f1f1; padding:15px; border-radius:8px; overflow:auto; max-height:400px; font-family:monospace; white-space:pre-wrap;">${escapedContent}</pre>`;
+        }
+      } catch(e) {
+        logsHtml = `<p>Failed to load log file: ${e.message}</p>`;
+      }
+
+      res.end(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Bidflow Server Boot Error</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 900px; margin: 40px auto; padding: 20px; color: #333; background-color: #fafafa; }
+            h1 { color: #dc2626; border-bottom: 2px solid #fee2e2; padding-bottom: 10px; font-weight: 800; font-size: 28px; }
+            .error-box { background: #fef2f2; border-left: 8px solid #dc2626; padding: 15px; border-radius: 4px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+            pre { background: #27272a; color: #f4f4f5; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+            h3 { margin-top: 30px; font-size: 18px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>Bidflow Backend - Server Boot Failed</h1>
+          <p>A fatal exception prevented the production server from starting. See diagnostic info below:</p>
+          <div class="error-box">
+            <strong>Error Message:</strong> ${bootError.message}<br/>
+            <strong>Code:</strong> ${bootError.code || 'N/A'}<br/>
+          </div>
+          <h3>Stack Trace</h3>
+          <pre>${bootError.stack || bootError.message}</pre>
+          <h3>Recent Server Logs</h3>
+          ${logsHtml}
+        </body>
+        </html>
+      `);
+    });
+
+    const rawPort = process.env.PORT || '3000';
+    const isPipe = isNaN(Number(rawPort));
+    const PORT = isPipe ? rawPort : Number(rawPort);
+
+    if (isPipe) {
+      server.listen(PORT, () => {
+        log(`Fallback diagnostic server listening on Passenger socket: [${PORT}]`);
+      });
+    } else {
+      server.listen(PORT, '0.0.0.0', () => {
+        log(`Fallback diagnostic server listening on port: [${PORT}] on host 0.0.0.0`);
+      });
+    }
+  } catch(e) {
+    log(`CRITICAL: Diagnostic server failed to start: ${e.message}`);
+    process.exit(1);
+  }
+}
+
 if (fs.existsSync(serverPath)) {
   log("Booting compiled production backend server...");
   try {
@@ -114,14 +184,15 @@ if (fs.existsSync(serverPath)) {
       } catch (retryErr) {
         log(`CRITICAL: Server boot repair failed: ${retryErr.message}`);
         if (retryErr.stack) log(retryErr.stack);
-        process.exit(1);
+        serveDiagnosticPage(retryErr);
       }
     } else {
       if (err.stack) log(err.stack);
-      process.exit(1);
+      serveDiagnosticPage(err);
     }
   }
 } else {
-  log(`CRITICAL ERROR: Compiled server file not found at: ${serverPath}`);
-  process.exit(1);
+  const fileErr = new Error(`Compiled server file not found at: ${serverPath}`);
+  log(`CRITICAL ERROR: ${fileErr.message}`);
+  serveDiagnosticPage(fileErr);
 }

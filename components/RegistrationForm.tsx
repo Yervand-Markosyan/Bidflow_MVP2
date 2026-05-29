@@ -87,18 +87,6 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit, on
     }
 
     const normalizedEmail = email.toLowerCase();
-    const registeredEmails = [
-      'already@registered.com', 
-      'test@test.com', 
-      'hello@bidflow.com',
-      'pordznakan@bidflow.ae',
-      'info@bidflow.ae'
-    ];
-
-    if (registeredEmails.includes(normalizedEmail)) {
-      setIsAlreadyRegistered(true);
-      return;
-    }
 
     if (window.bidflow) {
       window.bidflow.trackEarlyAccess(email, role === 'buyer' ? 'Buyer' : 'Supplier');
