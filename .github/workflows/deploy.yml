@@ -1,0 +1,77 @@
+name: Deploy Bidflow Application
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages and content updates
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build Application
+        run: npm run build
+
+      # Support GitHub Pages static site deployment
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      # Force commit built Plesk files back to the repository so Plesk Git pull can retrieve them
+      - name: Commit and Push Plesk Build Artifacts
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Force add ignored but required Plesk deployment files
+          git add -f dist/server.cjs
+          git add -f bidflow_plesk_deploy.zip.base64
+          
+          # Check if there are any changes to commit
+          if git diff --cached --quiet; then
+            echo "No build changes to commit."
+          else
+            git commit -m "chore: deploy-build production build artifacts [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
