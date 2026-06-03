@@ -723,7 +723,7 @@ async function startServer() {
     } catch (viteErr: any) {
       console.warn('Vite package load failed, falling back to static production mode:', viteErr.message || viteErr);
       app.use(express.static(distPath));
-      app.get('*', (req, res) => {
+      app.get('*all', (req, res) => {
         if (req.path.startsWith('/api')) {
           return res.status(404).json({ error: 'API endpoint not found' });
         }
@@ -733,7 +733,7 @@ async function startServer() {
   } else {
     console.log('Detected production mode (dist/index.html exists). Serving static files inside dist/');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: 'API endpoint not found' });
       }
