@@ -19,6 +19,8 @@ This file contains critical instructions for AI agents working on this project o
 - **Real-time Counters**: The app uses a specific pattern in `services/trackingService.ts` for real-time buyer/supplier counters. Ensure `initializeCounters()` is called on app load.
 
 ## 5. Manual Workflow Restoration
-- **The Problem**: AI Studio's push mechanism often deletes the `.github` folder on the remote repository.
-- **The Process**: Every time the agent completes a task and suggests a push, it MUST provide the full code and the exact path for the `.github/workflows/deploy.yml` file.
-- **User Action**: The user will manually recreate this file on GitHub after pushing from AI Studio to ensure the deployment continues to work.
+- **The Problem**: AI Studio's push mechanism often tracks the local `.github` folder or modifies it, causing issues during sync/push operations.
+- **The Process**: To avoid synchronization conflicts or leaving files in a "Modified" state, the agent MUST delete the `.github/workflows/deploy.yml` file from the workspace before the user pushes changes to GitHub.
+- **Agent Action**: The agent MUST summarize the changes ("What changes did you make?" description) and provide the exact, full code of `.github/workflows/deploy.yml` in the final response so the user can easily copy and paste it back into GitHub.
+- **User Action**: The user will manually recreate this file on GitHub (or restore it locally) after pushing from AI Studio to ensure the deployment continues to work.
+
