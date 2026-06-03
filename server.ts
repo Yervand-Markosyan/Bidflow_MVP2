@@ -109,7 +109,76 @@ async function initDatabasePool() {
       try {
         console.log('Dynamically importing mysql2/promise for host:', dbConfig.host);
         const mysql = await import('mysql2/promise');
-        pool = mysql.createPool(dbConfig);
+        
+        let activeConfig = { ...dbConfig };
+        let connected = false;
+        
+        // 1. First connection try: Configured DB_HOST (82.192.72.152)
+        try {
+          console.log(`Testing connection candidate: Host=[${activeConfig.host}], User=[${activeConfig.user}]`);
+          const testConn = await mysql.createConnection({
+            host: activeConfig.host,
+            database: activeConfig.database,
+            user: activeConfig.user,
+            password: activeConfig.password,
+            port: activeConfig.port,
+            connectTimeout: 4000 // 4s timeout for fast fallback
+          });
+          await testConn.execute('SELECT 1');
+          await testConn.end();
+          connected = true;
+          console.log(`Database connection validated successfully for host: [${activeConfig.host}]`);
+        } catch (testErr: any) {
+          console.warn(`Connection test failed for candidate host [${activeConfig.host}]: ${testErr.message || testErr}`);
+          
+          const isAccessDenied = testErr.code === 'ER_ACCESS_DENIED_ERROR';
+          const isRefusedOrTimeout = testErr.code === 'ECONNREFUSED' || testErr.code === 'ETIMEDOUT';
+          
+          if (isAccessDenied || isRefusedOrTimeout) {
+            // 2. Second connection try (Self-healing Fallback to localhost)
+            console.log('Attempting self-healing fallback connection to Host=[localhost]...');
+            try {
+              const testConnLocal = await mysql.createConnection({
+                host: 'localhost',
+                database: activeConfig.database,
+                user: activeConfig.user,
+                password: activeConfig.password,
+                port: activeConfig.port,
+                connectTimeout: 4000
+              });
+              await testConnLocal.execute('SELECT 1');
+              await testConnLocal.end();
+              activeConfig.host = 'localhost';
+              connected = true;
+              console.log('Successfully validated self-healing fallback database connection on Host=[localhost]!');
+            } catch (localErr: any) {
+              console.warn(`Fallback connection to Host=[localhost] also failed: ${localErr.message || localErr}`);
+              
+              // 3. Third connection try (Last-resort fallback to 127.0.0.1 loopback)
+              console.log('Attempting last-resort fallback connection to Host=[127.0.0.1]...');
+              try {
+                const testConnLocalIp = await mysql.createConnection({
+                  host: '127.0.0.1',
+                  database: activeConfig.database,
+                  user: activeConfig.user,
+                  password: activeConfig.password,
+                  port: activeConfig.port,
+                  connectTimeout: 4000
+                });
+                await testConnLocalIp.execute('SELECT 1');
+                await testConnLocalIp.end();
+                activeConfig.host = '127.0.0.1';
+                connected = true;
+                console.log('Successfully validated last-resort database connection on Host=[127.0.0.1]!');
+              } catch (localIpErr: any) {
+                console.error('All DB connection candidates (configured host, localhost, 127.0.0.1) failed. Proceeding with configured host pool.');
+              }
+            }
+          }
+        }
+
+        console.log(`Initializing final MariaDB connection pool with host: [${activeConfig.host}]`);
+        pool = mysql.createPool(activeConfig);
         console.log('Connecting to MariaDB pool initialized dynamically.');
       } catch (err: any) {
         console.error('Failed to initialize MariaDB pool dynamically:', err.message || err);
@@ -644,14 +713,20 @@ async function startServer() {
     } catch (viteErr: any) {
       console.warn('Vite package load failed, falling back to static production mode:', viteErr.message || viteErr);
       app.use(express.static(distPath));
-      app.get(/^\/(?!api).*/, (req, res) => {
+      app.get('*all', (req, res) => {
+        if (req.path.startsWith('/api')) {
+          return res.status(404).json({ error: 'API endpoint not found' });
+        }
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
   } else {
     console.log('Detected production mode (dist/index.html exists). Serving static files inside dist/');
     app.use(express.static(distPath));
-    app.get(/^\/(?!api).*/, (req, res) => {
+    app.get('*all', (req, res) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
