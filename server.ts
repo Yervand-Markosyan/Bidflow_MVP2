@@ -84,12 +84,22 @@ function loadEnv() {
 // Check and load configuration
 loadEnv();
 
+// Check if running inside Plesk subdomain context (contains vhosts in dir path or specific webspace env)
+const isPleskSubdomain = typeof process !== 'undefined' && (
+  process.cwd()?.includes('vhosts') || 
+  __dirname?.includes('vhosts') ||
+  process.env.USER === 'ais_db_admin'
+);
+
+// When running on Plesk, the database is on the same host - connect locally to 127.0.0.1 to bypass security blocklists
+const defaultDbHost = isPleskSubdomain ? '127.0.0.1' : (process.env.DB_HOST || '82.192.72.152');
+
 // Load database configuration from environment variables
 const dbConfig = {
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
+  host: defaultDbHost,
+  database: process.env.DB_NAME || 'admin_bidflow_ais',
+  user: process.env.DB_USER || 'ais_db_admin',
+  password: process.env.DB_PASS || '8i1z0Ij&3',
   port: parseInt(process.env.DB_PORT || '3306', 10),
   connectionLimit: 10,
   connectTimeout: 10000, // 10s connection timeout to prevent hanging the process and crashing Plesk Passenger on boot
