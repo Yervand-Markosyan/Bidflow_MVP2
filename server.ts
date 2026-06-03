@@ -99,7 +99,7 @@ const dbConfig = {
   host: defaultDbHost,
   database: process.env.DB_NAME || 'admin_bidflow_ais',
   user: process.env.DB_USER || 'ais_db_admin',
-  password: process.env.DB_PASS || '8i1z0Ij&3',
+  password: process.env.DB_PASS || 'mU#a6t094',
   port: parseInt(process.env.DB_PORT || '3306', 10),
   connectionLimit: 10,
   connectTimeout: 10000, // 10s connection timeout to prevent hanging the process and crashing Plesk Passenger on boot

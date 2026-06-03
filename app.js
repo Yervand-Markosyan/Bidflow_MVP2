@@ -60,6 +60,18 @@ try {
         }
       }
 
+      // Touch Phusion Passenger restart trigger to reload loaded processes dynamically
+      try {
+        const tmpDir = path.join(APP_ROOT, 'tmp');
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(tmpDir, 'restart.txt'), String(Date.now()));
+        log("Successfully touched tmp/restart.txt to signal Passenger app reload.");
+      } catch (restartErr) {
+        log(`Warning: Failed to touch tmp/restart.txt: ${restartErr.message}`);
+      }
+
       // Cleanup to prevent infinite unzip loops on next restarts
       try {
         if (fs.existsSync(zipFile)) fs.unlinkSync(zipFile);
