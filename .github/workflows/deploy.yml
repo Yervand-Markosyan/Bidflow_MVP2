@@ -1,0 +1,77 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'dist/**'
+      - '**.md'
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages and pushing updates
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Compile and Bundle Client + Server
+        run: npm run build
+
+      - name: Commit Compiled Server Backend
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Force add compiled files if they are modified
+          git add -f dist/server.cjs || true
+          
+          # Only commit and push if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: auto-compile server backend [skip ci]"
+            git push origin HEAD:main
+            echo "Successfully committed and pushed compiled server to main branch."
+          else
+            echo "No compiled changes or updates detected. Skipping commit."
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
