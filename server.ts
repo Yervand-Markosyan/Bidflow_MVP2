@@ -94,7 +94,7 @@ const isPleskSubdomain = typeof process !== 'undefined' && (
 // When running on Plesk, the database is on the same host - connect locally to 127.0.0.1 to bypass security blocklists
 const defaultDbHost = isPleskSubdomain ? '127.0.0.1' : (process.env.DB_HOST || '82.192.72.152');
 
-// Load database configuration from environment variables
+// Load database configuration from environment variables (configured to UTC+04:00 for Armenia/Dubai Time)
 const dbConfig = {
   host: defaultDbHost,
   database: process.env.DB_NAME || 'admin_bidflow_ais',
@@ -104,7 +104,8 @@ const dbConfig = {
   connectionLimit: 10,
   connectTimeout: 10000, // 10s connection timeout to prevent hanging the process and crashing Plesk Passenger on boot
   enableKeepAlive: true,
-  keepAliveInitialDelay: 10000
+  keepAliveInitialDelay: 10000,
+  timezone: '+04:00'
 };
 
 // Create a MySQL/MariaDB connection pool dynamically only if DB_HOST is present
@@ -189,6 +190,16 @@ async function initDatabasePool() {
 
         console.log(`Initializing final MariaDB connection pool with host: [${activeConfig.host}]`);
         pool = mysql.createPool(activeConfig);
+        
+        // Ensure every new connection defaults to UTC+04:00 (Armenia & Dubai Time) so CURRENT_TIMESTAMP/NOW() values are correct
+        pool.on('connection', (connection: any) => {
+          connection.query("SET time_zone = '+04:00'", (timezoneErr: any) => {
+            if (timezoneErr) {
+              console.error('Failed to set timezone to UTC+04:00 on connection startup:', timezoneErr);
+            }
+          });
+        });
+
         console.log('Connecting to MariaDB pool initialized dynamically.');
       } catch (err: any) {
         console.error('Failed to initialize MariaDB pool dynamically:', err.message || err);
