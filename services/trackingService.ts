@@ -420,7 +420,7 @@ export const subscribeToCounters = (callback: (data: { buyers: number; suppliers
 
   const fetchLiveCounters = async () => {
     try {
-      const url = getBackendUrl('/api/counters');
+      const url = getBackendUrl(`/api/counters?_=${Date.now()}`);
       const response = await fetch(url);
       if (response.ok) {
         const result = await response.json();

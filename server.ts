@@ -427,6 +427,11 @@ async function startServer() {
 
   // Get real-time buyer/supplier counters from MariaDB/MySQL
   app.get('/api/counters', async (req, res) => {
+    // Force browser and proxy servers to never cache this dynamic count response
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     try {
       if (!pool) {
         return res.json({ success: true, buyers: 0, suppliers: 0, total: 0 });
