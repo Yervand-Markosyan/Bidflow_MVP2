@@ -433,16 +433,18 @@ async function startServer() {
       }
       
       const [buyerRows]: any = await pool.query("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'buyer'");
-      const [supplierRows]: any = await pool.query("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'supplier'");
+      const [supplierRows]: any = await pool.query("SELECT COUNT(*) as count FROM users WHERE LOWER(role) IN ('supplier', 'seller')");
+      const [totalRows]: any = await pool.query("SELECT COUNT(*) as count FROM users");
       
       const buyers = buyerRows[0]?.count || 0;
       const suppliers = supplierRows[0]?.count || 0;
+      const total = totalRows[0]?.count || 0;
       
       return res.json({
         success: true,
         buyers,
         suppliers,
-        total: buyers + suppliers
+        total
       });
     } catch (err: any) {
       console.error('Error fetching counters from MariaDB/MySQL:', err);
