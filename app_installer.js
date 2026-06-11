@@ -147,19 +147,10 @@ function serveDiagnosticPage(bootError) {
       `);
     });
 
-    const rawPort = process.env.PORT || '3000';
-    const isPipe = isNaN(Number(rawPort));
-    const PORT = isPipe ? rawPort : Number(rawPort);
-
-    if (isPipe) {
-      server.listen(PORT, () => {
-        log(`Fallback diagnostic server listening on Passenger socket: [${PORT}]`);
-      });
-    } else {
-      server.listen(PORT, '0.0.0.0', () => {
-        log(`Fallback diagnostic server listening on port: [${PORT}] on host 0.0.0.0`);
-      });
-    }
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      log(`Fallback diagnostic server listening on: [${PORT}]`);
+    });
   } catch(e) {
     log(`CRITICAL: Diagnostic server failed to start: ${e.message}`);
     process.exit(1);
