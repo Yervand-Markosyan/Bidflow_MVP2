@@ -62,6 +62,14 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "password", "role", "updatedAt"]
+    },
+    "Test": {
+      "title": "Connection Test",
+      "description": "Used internally to verify that Firestore connection is active.",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -80,6 +88,10 @@
     "admins": {
       "schema": "Admin",
       "description": "List of administrative accounts."
+    },
+    "test/connection": {
+      "schema": "Test",
+      "description": "Static document to verify database connection state on app load."
     }
   }
 }

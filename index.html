@@ -95,6 +95,38 @@
             return originalSetTimeout(handler, delay, ...args);
           };
 
+          // 5. Intercept requestAnimationFrame calls to detect and bypass RAF-based debugger loops
+          const originalRAF = window.requestAnimationFrame;
+          window.requestAnimationFrame = function(callback) {
+            if (typeof callback === 'function') {
+              try {
+                const cbStr = callback.toString();
+                if (/\bdebugger\b/i.test(cbStr)) {
+                  console.warn('Blocked recurrent requestAnimationFrame debugger hook.');
+                  return 0;
+                }
+              } catch (e) {}
+            }
+            return originalRAF(callback);
+          };
+
+          // 6. Manage Webvisor disable states based on running environment or debug query tokens
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const isLocalOrPreview = window.location.hostname.includes('localhost') || 
+                                     window.location.hostname.includes('127.0.0.1') || 
+                                     window.location.hostname.includes('run.app') || 
+                                     window.location.hostname.includes('github.io');
+            
+            if (params.has('nodebug') || params.has('debug') || isLocalOrPreview) {
+              localStorage.setItem('disable_webvisor', 'true');
+              console.log('Bidflow Debugger Protection: Webvisor bypass flag is set to true in localStorage.');
+            } else if (params.has('enablewebvisor')) {
+              localStorage.removeItem('disable_webvisor');
+              console.log('Bidflow Debugger Protection: Webvisor tracking enabled.');
+            }
+          } catch (storageErr) {}
+
         } catch (e) {
           console.error('Failed to initialize advanced anti-debugging protections:', e);
         }
@@ -478,7 +510,24 @@
             k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
         })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=106724195', 'ym');
 
-        ym(106724195, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+        const shouldEnableWebvisor = (function() {
+            try {
+                return localStorage.getItem('disable_webvisor') !== 'true';
+            } catch (e) {
+                return true;
+            }
+        })();
+
+        ym(106724195, 'init', {
+            ssr: true, 
+            webvisor: shouldEnableWebvisor, 
+            clickmap: true, 
+            ecommerce: "dataLayer", 
+            referrer: document.referrer, 
+            url: location.href, 
+            accurateTrackBounce: true, 
+            trackLinks: true
+        });
     </script>
     <!-- /Yandex.Metrika counter -->
 

@@ -88,6 +88,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /test/connection {
+      // Allow any visitor to do basic connection status checks
+      allow read: if true;
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if isAdmin();
