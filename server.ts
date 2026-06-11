@@ -38,6 +38,27 @@ function setupFileLogging() {
     logToFile('ERROR', ...args);
   };
 
+  // Capture uncaught exceptions and unhandled promise rejections directly in server_log.txt
+  process.on('uncaughtException', (err: any) => {
+    const timestamp = new Date().toISOString();
+    const formatted = `[${timestamp}] [CRITICAL_EXCEPTION] ${err?.message || err}\n${err?.stack || ''}\n`;
+    try {
+      fs.appendFileSync(logPath, formatted);
+    } catch (e) {}
+    originalError('UNCAUGHT EXCEPTION:', err);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason: any) => {
+    const timestamp = new Date().toISOString();
+    const formatted = `[${timestamp}] [CRITICAL_REJECTION] ${reason?.message || String(reason)}\n${reason?.stack || ''}\n`;
+    try {
+      fs.appendFileSync(logPath, formatted);
+    } catch (e) {}
+    originalError('UNHANDLED REJECTION:', reason);
+    process.exit(1);
+  });
+
   console.log('--- File Logging Initialized (Server Starting) ---');
   console.log(`Current Working Directory: ${process.cwd()}`);
   console.log(`Resolved APP_ROOT Path: ${APP_ROOT}`);
@@ -91,8 +112,8 @@ const isPleskSubdomain = typeof process !== 'undefined' && (
   process.env.USER === 'ais_db_admin'
 );
 
-// When running on Plesk, the database is on the same host - try the public IP first (verified to work) and fallback to localhost loops if blocked
-const defaultDbHost = process.env.DB_HOST || '82.192.72.152';
+// When running on Plesk, the database is on the same host - use localhost for maximum performance & zero firewall latency, fallback to public IP otherwise
+const defaultDbHost = process.env.DB_HOST || (isPleskSubdomain ? 'localhost' : '82.192.72.152');
 
 // Load database configuration from environment variables (configured to UTC+04:00 for Armenia/Dubai Time)
 const dbConfig = {
@@ -322,11 +343,10 @@ async function startServer() {
 
   const app = express();
   
-  // Passenger in Plesk sets process.env.PORT to a Unix domain socket path or port.
-  // We parse it dynamically to support both socket path (string) and container port (number) modes.
+  // Native port/socket resolution for Phusion Passenger compatibility on Plesk
+  // Convert numeric strings to numbers (TCP port) and keep paths as strings (Unix Sockets)
   const rawPort = process.env.PORT || '3000';
-  const isPipe = isNaN(Number(rawPort));
-  const PORT = isPipe ? rawPort : Number(rawPort);
+  const PORT = /^\d+$/.test(rawPort) ? parseInt(rawPort, 10) : rawPort;
 
   // Enable CORS for external static frontends like bidflow.ae or github pages
   app.use((req, res, next) => {
@@ -402,7 +422,23 @@ async function startServer() {
       return res.setHeader('Content-Type', 'text/plain; charset=utf-8').send('No logs recorded yet.');
     }
     try {
-      const logs = fs.readFileSync(logPath, 'utf8');
+      let logs = '';
+      const stats = fs.statSync(logPath);
+      if (stats.size > 250000) {
+        // Safe buffer reading of only the tailing 250KB of logs
+        const fd = fs.openSync(logPath, 'r');
+        const buffer = Buffer.alloc(250000);
+        fs.readSync(fd, buffer, 0, 250000, stats.size - 250000);
+        fs.closeSync(fd);
+        
+        const rawStr = buffer.toString('utf8');
+        const firstNewLine = rawStr.indexOf('\n');
+        const cleanStr = firstNewLine !== -1 ? rawStr.substring(firstNewLine + 1) : rawStr;
+        
+        logs = `[Logs truncated. Showing last 250KB to respect Plesk ModSecurity size limits. Use /api/server-logs/clear to reset]\n\n...[truncated]...\n${cleanStr}`;
+      } else {
+        logs = fs.readFileSync(logPath, 'utf8');
+      }
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       return res.send(logs);
     } catch (err: any) {
@@ -741,7 +777,7 @@ async function startServer() {
     } catch (viteErr: any) {
       console.warn('Vite package load failed, falling back to static production mode:', viteErr.message || viteErr);
       app.use(express.static(distPath));
-      app.get('*all', (req, res) => {
+      app.get('*', (req, res) => {
         if (req.path.startsWith('/api')) {
           return res.status(404).json({ error: 'API endpoint not found' });
         }
@@ -751,7 +787,7 @@ async function startServer() {
   } else {
     console.log('Detected production mode (dist/index.html exists). Serving static files inside dist/');
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: 'API endpoint not found' });
       }
@@ -759,15 +795,10 @@ async function startServer() {
     });
   }
 
-  if (isPipe) {
-    app.listen(PORT, () => {
-      console.log(`Server is booting! Listening on Passenger named pipe/socket: [${PORT}]`);
-    });
-  } else {
-    app.listen(PORT as number, '0.0.0.0', () => {
-      console.log(`Server is booting! Listening on port: [${PORT}] on host 0.0.0.0`);
-    });
-  }
+  // Listen on PORT natively, letting Node.js dynamically bind to Unix Socket path or local TCP port with no 0.0.0.0 permission errors
+  app.listen(PORT, () => {
+    console.log(`Server is booting! Listening on URL/port/socket: [${PORT}]`);
+  });
 }
 
 startServer();
