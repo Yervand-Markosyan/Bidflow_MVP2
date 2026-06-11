@@ -112,6 +112,17 @@ function serveDiagnosticPage(bootError) {
   try {
     const http = require('http');
     const server = http.createServer((req, res) => {
+      // Set permissive CORS headers for the diagnostic page so the visitor's browser console can read it
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      // Handshake for PREFLIGHT requests immediately to prevent masking the real 500 error code
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        return res.end();
+      }
+
       res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
       
       let logsHtml = '';
@@ -158,19 +169,10 @@ function serveDiagnosticPage(bootError) {
       `);
     });
 
-    const rawPort = process.env.PORT || '3000';
-    const isPipe = isNaN(Number(rawPort));
-    const PORT = isPipe ? rawPort : Number(rawPort);
-
-    if (isPipe) {
-      server.listen(PORT, () => {
-        log(`Fallback diagnostic server listening on Passenger socket: [${PORT}]`);
-      });
-    } else {
-      server.listen(PORT, '0.0.0.0', () => {
-        log(`Fallback diagnostic server listening on port: [${PORT}] on host 0.0.0.0`);
-      });
-    }
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      log(`Fallback diagnostic server listening on: [${PORT}]`);
+    });
   } catch(e) {
     log(`CRITICAL: Diagnostic server failed to start: ${e.message}`);
     process.exit(1);
