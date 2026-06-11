@@ -91,8 +91,8 @@ const isPleskSubdomain = typeof process !== 'undefined' && (
   process.env.USER === 'ais_db_admin'
 );
 
-// When running on Plesk, the database is on the same host - connect locally to 127.0.0.1 to bypass security blocklists
-const defaultDbHost = isPleskSubdomain ? '127.0.0.1' : (process.env.DB_HOST || '82.192.72.152');
+// When running on Plesk, the database is on the same host - try the public IP first (verified to work) and fallback to localhost loops if blocked
+const defaultDbHost = process.env.DB_HOST || '82.192.72.152';
 
 // Load database configuration from environment variables (configured to UTC+04:00 for Armenia/Dubai Time)
 const dbConfig = {
