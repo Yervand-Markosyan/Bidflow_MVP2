@@ -1,6 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Anti-Debugging Bypass (Prevents DevTools/F12 locks from Yandex Webvisor & other scripts) -->
+    <script>
+      (function() {
+        try {
+          const originalFunction = window.Function;
+          window.Function = function(...args) {
+            if (args.length > 0 && typeof args[args.length - 1] === 'string') {
+              const body = args[args.length - 1];
+              if (body.includes('debugger')) {
+                console.warn('Blocked dynamic compilation of "debugger" statement.');
+                return function() {};
+              }
+            }
+            return originalFunction.apply(this, args);
+          };
+          window.Function.prototype = originalFunction.prototype;
+
+          const originalEval = window.eval;
+          window.eval = function(str) {
+            if (typeof str === 'string' && str.includes('debugger')) {
+              console.warn('Blocked execution of eval "debugger" statement.');
+              return;
+            }
+            return originalEval(str);
+          };
+        } catch (e) {
+          console.error('Failed to inject debugger bypass:', e);
+        }
+      })();
+    </script>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-DQHPE63XKN"></script>
     <script>
