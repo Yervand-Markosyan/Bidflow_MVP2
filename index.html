@@ -5,29 +5,98 @@
     <script>
       (function() {
         try {
+          // 1. Defeat Getter-based DevTools detection by muting console logging from third-party tracking scripts
+          const consoleMethods = ['log', 'warn', 'error', 'info', 'dir', 'table', 'clear'];
+          consoleMethods.forEach(method => {
+            const originalMethod = console[method];
+            if (typeof originalMethod === 'function') {
+              console[method] = function(...args) {
+                try {
+                  const stack = new Error().stack || '';
+                  if (stack.includes('tag.js') || stack.includes('watch.js') || stack.includes('yandex') || stack.includes('mc.yandex.ru')) {
+                    // Suppress tracking telemetry/detector console logs entirely
+                    return;
+                  }
+                } catch (e) {}
+                return originalMethod.apply(console, args);
+              };
+            }
+          });
+
+          // 2. Intercept and neutralize dynamic Function constructor call traps containing debugger keyword
           const originalFunction = window.Function;
-          window.Function = function(...args) {
+          const customFunction = function(...args) {
             if (args.length > 0 && typeof args[args.length - 1] === 'string') {
               const body = args[args.length - 1];
-              if (body.includes('debugger')) {
-                console.warn('Blocked dynamic compilation of "debugger" statement.');
+              if (/\bdebugger\b/i.test(body) || body.includes('debu') || body.includes('bugger')) {
+                console.warn('Blocked dynamic compilation of suspicous "debugger" script structure.');
                 return function() {};
               }
             }
             return originalFunction.apply(this, args);
           };
-          window.Function.prototype = originalFunction.prototype;
+          
+          customFunction.prototype = originalFunction.prototype;
+          window.Function = customFunction;
 
+          // Crucial: Intercept (fn).constructor and Function.prototype.constructor
+          Object.defineProperty(Function.prototype, 'constructor', {
+            value: customFunction,
+            writable: true,
+            configurable: true
+          });
+
+          // 3. Intercept window.eval to prevent evaluations containing "debugger" statements
           const originalEval = window.eval;
           window.eval = function(str) {
-            if (typeof str === 'string' && str.includes('debugger')) {
-              console.warn('Blocked execution of eval "debugger" statement.');
+            if (typeof str === 'string' && (/\bdebugger\b/i.test(str) || str.includes('debu') || str.includes('bugger'))) {
+              console.warn('Blocked execution of dynamic eval "debugger" statement.');
               return;
             }
             return originalEval(str);
           };
+
+          // 4. Intercept setInterval and setTimeout hooks to prevent recurring debugger loops
+          const originalSetInterval = window.setInterval;
+          window.setInterval = function(handler, delay, ...args) {
+            if (typeof handler === 'string') {
+              if (/\bdebugger\b/i.test(handler)) {
+                console.warn('Blocked recurrenct setInterval debugger hook.');
+                return 0;
+              }
+            } else if (typeof handler === 'function') {
+              try {
+                const handlerStr = handler.toString();
+                if (/\bdebugger\b/i.test(handlerStr)) {
+                  console.warn('Blocked recurrent setInterval function loop debugger hook.');
+                  return function() {};
+                }
+              } catch (e) {}
+            }
+            return originalSetInterval(handler, delay, ...args);
+          };
+
+          const originalSetTimeout = window.setTimeout;
+          window.setTimeout = function(handler, delay, ...args) {
+            if (typeof handler === 'string') {
+              if (/\bdebugger\b/i.test(handler)) {
+                console.warn('Blocked recurrent setTimeout debugger hook.');
+                return 0;
+              }
+            } else if (typeof handler === 'function') {
+              try {
+                const handlerStr = handler.toString();
+                if (/\bdebugger\b/i.test(handlerStr)) {
+                  console.warn('Blocked recurrent setTimeout function debugger hook.');
+                  return function() {};
+                }
+              } catch (e) {}
+            }
+            return originalSetTimeout(handler, delay, ...args);
+          };
+
         } catch (e) {
-          console.error('Failed to inject debugger bypass:', e);
+          console.error('Failed to initialize advanced anti-debugging protections:', e);
         }
       })();
     </script>
