@@ -8,14 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist/*
-!dist/server.cjs
 dist-ssr
 *.local
 
 # Plesk deployment archives and logs
 bidflow_plesk_deploy.zip
-bidflow_plesk_deploy.zip.base64
 server_log.txt
 
 # Editor directories and files
