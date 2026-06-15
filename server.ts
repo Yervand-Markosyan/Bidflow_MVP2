@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { db as firestoreDb } from './firebase';
 
 // Calculate correct application root directory dynamically to support both tsx dev and bundled server.cjs on Plesk/Passenger
 const APP_ROOT = __dirname.endsWith('dist') ? path.join(__dirname, '..') : __dirname;
@@ -261,6 +263,7 @@ async function ensureTablesExist() {
     // 1. users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT UNIQUE,
         email VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255),
         user_code INT,
@@ -273,6 +276,18 @@ async function ensureTablesExist() {
         registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // Ensure 'id' column exists dynamically if table was created in an older schema session
+    const [columns]: any = await pool.query("SHOW COLUMNS FROM users LIKE 'id'");
+    if (columns.length === 0) {
+      console.log("[SCHEMA] Adding auto-increment 'id' column first in users table...");
+      try {
+        await pool.query("ALTER TABLE users ADD COLUMN id INT AUTO_INCREMENT UNIQUE FIRST");
+        console.log("[SCHEMA] 'id' column added successfully to existing users table!");
+      } catch (alterErr: any) {
+        console.error("[SCHEMA] Failed to automatically add 'id' column:", alterErr.message || alterErr);
+      }
+    }
 
     // 2. sessions table
     await pool.query(`
@@ -380,6 +395,99 @@ async function startServer() {
       }
     }
     next();
+  });
+
+  // Cleanup helper to automatically delete test users starting with 'yer.' or testregistered@bidflow.ae in both databases
+  async function runTestUsersCleanup() {
+    console.log('\n========================================');
+    console.log('[CLEANUP] Starting test users cleanup partition...');
+    console.log('========================================');
+    
+    const statsResult = {
+      mysql: { found: 0, deleted: 0, error: null as string | null },
+      firestore: { found: 0, deleted: 0, error: null as string | null }
+    };
+
+    // 1. Clean MySQL Database
+    try {
+      await initDatabasePool();
+      if (pool) {
+        // Query matching users
+        const [rows]: any = await pool.query(
+          "SELECT email, name FROM users WHERE LOWER(email) LIKE 'yer.%' OR LOWER(email) = 'testregistered@bidflow.ae'"
+        );
+        statsResult.mysql.found = rows.length;
+        console.log(`[CLEANUP] Found ${rows.length} test users in MySQL.`);
+        
+        if (rows.length > 0) {
+          const [delRes]: any = await pool.query(
+            "DELETE FROM users WHERE LOWER(email) LIKE 'yer.%' OR LOWER(email) = 'testregistered@bidflow.ae'"
+          );
+          statsResult.mysql.deleted = delRes.affectedRows || 0;
+          console.log(`[CLEANUP] Deleted test users from MySQL. Rows affected: ${statsResult.mysql.deleted}`);
+        }
+      } else {
+        console.log('[CLEANUP] MySQL is not active/disabled, skipping MySQL cleanup.');
+      }
+    } catch (mysqlErr: any) {
+      console.error('[CLEANUP] Error cleaning MySQL:', mysqlErr.message || mysqlErr);
+      statsResult.mysql.error = mysqlErr.message || String(mysqlErr);
+    }
+
+    // 2. Clean Firestore Database using Real Firebase Client SDK
+    try {
+      console.log(`[CLEANUP] Querying Firestore 'users' collection using initialized Firestore DB SDK...`);
+      const usersColRef = collection(firestoreDb, 'users');
+      const querySnapshot = await getDocs(usersColRef);
+      console.log(`[CLEANUP] Firestore total user document(s) fetched: ${querySnapshot.size}`);
+      
+      for (const docSnap of querySnapshot.docs) {
+        const docId = docSnap.id;
+        const docIdLower = docId.toLowerCase().trim();
+        const data = docSnap.data() || {};
+        const emailVal = (data.email || '').toLowerCase().trim();
+        
+        if (
+          docIdLower.startsWith('yer.') || 
+          emailVal.startsWith('yer.') || 
+          docIdLower === 'testregistered@bidflow.ae' || 
+          emailVal === 'testregistered@bidflow.ae'
+        ) {
+          console.log(`[CLEANUP] Found match in Firestore: DocId=[${docId}], Email=[${data.email || 'N/A'}], Name=[${data.name || 'N/A'}]`);
+          statsResult.firestore.found++;
+          
+          const docRef = doc(firestoreDb, 'users', docId);
+          await deleteDoc(docRef);
+          statsResult.firestore.deleted++;
+          console.log(` -> Successfully deleted Firestore document ID: ${docId}`);
+        }
+      }
+    } catch (fsErr: any) {
+      console.error('[CLEANUP] Error cleaning Firestore with Client SDK:', fsErr.message || fsErr);
+      statsResult.firestore.error = fsErr.message || String(fsErr);
+    }
+    
+    console.log('========================================');
+    console.log('[CLEANUP] Cleanup finished!', JSON.stringify(statsResult));
+    console.log('========================================\n');
+    return statsResult;
+  }
+
+  // API Endpoint to manually trigger the cleanup of "yer." test accounts
+  app.post('/api/cleanup-test-users', async (req, res) => {
+    try {
+      const results = await runTestUsersCleanup();
+      return res.json({
+        success: true,
+        message: 'Cleanup protocol executed successfully!',
+        results
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err.message || String(err)
+      });
+    }
   });
 
   // Diagnostic endpoint to test database connection live
@@ -805,6 +913,10 @@ async function startServer() {
   // Listen on PORT natively, letting Node.js dynamically bind to Unix Socket path or local TCP port with no 0.0.0.0 permission errors
   app.listen(PORT, () => {
     console.log(`Server is booting! Listening on URL/port/socket: [${PORT}]`);
+    // Run one-time background cleanup of test "yer." users on boot
+    runTestUsersCleanup().catch(err => {
+      console.error('[CLEANUP] Background startup cleanup failed:', err);
+    });
   });
 }
 
