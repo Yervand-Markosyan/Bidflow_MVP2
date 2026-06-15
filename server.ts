@@ -260,6 +260,14 @@ async function ensureTablesExist() {
   try {
     console.log('Ensuring MariaDB/MySQL database schema tables exist...');
     
+    // 1. Describe table before changes to inspect current structure
+    try {
+      const [descRows]: any = await pool.query("DESCRIBE users");
+      console.log("[SCHEMA-INSPECT] Current users columns:", JSON.stringify(descRows, null, 2));
+    } catch (descErr: any) {
+      console.warn("[SCHEMA-INSPECT] Failed to DESCRIBE users (might not exist yet):", descErr.message);
+    }
+
     // 1. users table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -280,42 +288,42 @@ async function ensureTablesExist() {
     // Ensure 'id' column exists dynamically if table was created in an older schema session
     const [columns]: any = await pool.query("SHOW COLUMNS FROM users LIKE 'id'");
     if (columns.length === 0) {
-      console.log("[SCHEMA] Adding safe 'id' column first in users table...");
+      console.log("[SCHEMA] Adding auto-increment 'id' column first in users table...");
       try {
-        await pool.query("ALTER TABLE users ADD COLUMN id INT NULL FIRST");
-        console.log("[SCHEMA] 'id' column added successfully!");
+        await pool.query("ALTER TABLE users ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST");
+        console.log("[SCHEMA] 'id' column added successfully as AUTO_INCREMENT PRIMARY KEY!");
       } catch (alterErr: any) {
         console.error("[SCHEMA] Failed to automatically add 'id' column:", alterErr.message || alterErr);
       }
     } else {
-      // Relax and strip potentially broken autoincrement constraints to prevent Plesk database execution failures
+      // Repair and assign sequential IDs to any rows where id is null before we add AUTO_INCREMENT
       try {
-        console.log("[SCHEMA] Relaxing 'id' column rules to safe INT NULL...");
-        await pool.query("ALTER TABLE users MODIFY COLUMN id INT NULL");
-        console.log("[SCHEMA] 'id' column modified to regular INT NULL successfully!");
-      } catch (modifyErr: any) {
-        console.warn("[SCHEMA] Safe warning: Failed to modify id column (might be fine):", modifyErr.message || modifyErr);
-      }
-    }
-
-    // Run custom sequence restoration migrator: Assign incremental IDs to any rows where id is null
-    try {
-      const [nullIdUsers]: any = await pool.query(
-        "SELECT email FROM users WHERE id IS NULL ORDER BY registration_date ASC, email ASC"
-      );
-      if (nullIdUsers && nullIdUsers.length > 0) {
-        console.log(`[SCHEMA] Found ${nullIdUsers.length} existing user(s) with NULL ID. Repairing and assigning sequential IDs...`);
-        const [maxIdRows]: any = await pool.query("SELECT MAX(id) as maxId FROM users");
-        let currentMax = Number(maxIdRows[0]?.maxId || 0);
-        
-        for (const user of nullIdUsers) {
-          currentMax++;
-          await pool.query("UPDATE users SET id = ? WHERE email = ?", [currentMax, user.email]);
+        const [nullIdUsers]: any = await pool.query(
+          "SELECT email FROM users WHERE id IS NULL ORDER BY registration_date ASC, email ASC"
+        );
+        if (nullIdUsers && nullIdUsers.length > 0) {
+          console.log(`[SCHEMA] Found ${nullIdUsers.length} existing user(s) with NULL ID. Repairing and assigning sequential IDs...`);
+          const [maxIdRows]: any = await pool.query("SELECT MAX(id) as maxId FROM users");
+          let currentMax = Number(maxIdRows[0]?.maxId || 0);
+          
+          for (const user of nullIdUsers) {
+            currentMax++;
+            await pool.query("UPDATE users SET id = ? WHERE email = ?", [currentMax, user.email]);
+          }
+          console.log(`[SCHEMA] Backfill complete! Assigned incremental sequential IDs up to: ${currentMax}`);
         }
-        console.log(`[SCHEMA] Backfill complete! Assigned incremental sequential IDs up to: ${currentMax}`);
+      } catch (migErr: any) {
+        console.error("[SCHEMA] Safe sequential backfill migration failed:", migErr.message || migErr);
       }
-    } catch (migErr: any) {
-      console.error("[SCHEMA] Safe sequential backfill migration failed:", migErr.message || migErr);
+
+      // Ensure 'id' is AUTO_INCREMENT PRIMARY KEY
+      try {
+        console.log("[SCHEMA] Ensuring 'id' column is AUTO_INCREMENT NOT NULL...");
+        await pool.query("ALTER TABLE users MODIFY COLUMN id INT AUTO_INCREMENT NOT NULL");
+        console.log("[SCHEMA] 'id' column modified to AUTO_INCREMENT NOT NULL successfully!");
+      } catch (modifyErr: any) {
+        console.warn("[SCHEMA] Safe warning: Failed to convert id column to AUTO_INCREMENT (might be fine if already set or duplicate key exists):", modifyErr.message || modifyErr);
+      }
     }
 
     // 2. sessions table
@@ -703,30 +711,13 @@ async function startServer() {
       }
       console.log(`Generated unique 4-digit code [${uniqueCode}] (attempts: ${attempts})`);
 
-      // 3. Determine the next sequential user ID for easy counting (MAX(id) + 1)
-      let nextId = 1;
-      try {
-        const [maxIdRows]: any = await pool.query("SELECT MAX(id) as maxId FROM users");
-        const maxId = maxIdRows[0]?.maxId;
-        if (maxId !== null && maxId !== undefined) {
-          nextId = Number(maxId) + 1;
-        } else {
-          const [countRows]: any = await pool.query("SELECT COUNT(*) as count FROM users");
-          nextId = (countRows[0]?.count || 0) + 1;
-        }
-        console.log(`Resolved next registration sequential ID: ${nextId}`);
-      } catch (idErr: any) {
-        console.warn("Failed to get sequential ID on registered user, defaulting safely to timestamp sequence id:", idErr.message || idErr);
-        nextId = Math.floor(Date.now() / 1000) % 1000000;
-      }
-
-      // 4. Save user registration details
+      // 3. Save user registration details
       const companyName = name || normalizedEmail.split('@')[0];
       const platform = utm_source || 'direct';
 
       const userInsertSql = `
-        INSERT INTO users (id, email, name, user_code, role, platform, source, utm_source, utm_medium, utm_campaign, registration_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO users (email, name, user_code, role, platform, source, utm_source, utm_medium, utm_campaign, registration_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON DUPLICATE KEY UPDATE 
           name = VALUES(name),
           user_code = VALUES(user_code),
@@ -736,7 +727,6 @@ async function startServer() {
 
       console.log(`Inserting/Updating users table for: [${normalizedEmail}]...`);
       await pool.query(userInsertSql, [
-        nextId,
         normalizedEmail,
         companyName,
         uniqueCode,
@@ -876,26 +866,6 @@ async function startServer() {
           const email = (eventProperties.email || '').toLowerCase().trim();
           
           if (email) {
-            let nextId = 1;
-            try {
-              const [existingUsers]: any = await queryDb('SELECT id FROM users WHERE email = ?', [email]);
-              if (existingUsers && existingUsers.length > 0 && existingUsers[0].id !== null && existingUsers[0].id !== undefined) {
-                nextId = Number(existingUsers[0].id);
-              } else {
-                const [maxIdRows]: any = await queryDb("SELECT MAX(id) as maxId FROM users", []);
-                const maxId = maxIdRows[0]?.maxId;
-                if (maxId !== null && maxId !== undefined) {
-                  nextId = Number(maxId) + 1;
-                } else {
-                  const [countRows]: any = await queryDb("SELECT COUNT(*) as count FROM users", []);
-                  nextId = (countRows[0]?.count || 0) + 1;
-                }
-              }
-            } catch (idErr: any) {
-              console.warn("Failed to get sequential ID in event registration, falling back safely:", idErr.message);
-              nextId = Math.floor(Date.now() / 1000) % 1000000;
-            }
-
             const rawRole = eventProperties.role || '';
             const roleFormatted = rawRole.toLowerCase() === 'buyer' ? 'Buyer' : (rawRole.toLowerCase() === 'supplier' ? 'Supplier' : rawRole);
             const userCode = parseInt(eventProperties.user_code, 10) || null;
@@ -906,8 +876,8 @@ async function startServer() {
             const source = eventProperties.source || utmSource || 'direct';
 
             const userInsertSql = `
-              INSERT INTO users (id, email, name, user_code, role, platform, source, utm_source, utm_medium, utm_campaign, registration_date)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              INSERT INTO users (email, name, user_code, role, platform, source, utm_source, utm_medium, utm_campaign, registration_date)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
               ON DUPLICATE KEY UPDATE 
                 name = VALUES(name),
                 user_code = COALESCE(VALUES(user_code), user_code),
@@ -916,7 +886,7 @@ async function startServer() {
             `;
 
             await queryDb(userInsertSql, [
-              nextId, email, name, userCode, roleFormatted, platform, source, utmSource, utmMedium, utmCampaign
+              email, name, userCode, roleFormatted, platform, source, utmSource, utmMedium, utmCampaign
             ]);
 
             // Update session indicating the registration completed successfully
