@@ -246,11 +246,18 @@
     
       function track(eventName, properties = {}) {
         // 1. Force recalculate live metrics
-        const h = document.documentElement;
-        const b = document.body;
+        const h = document.documentElement || {};
+        const b = document.body || {};
         const st = 'scrollTop';
         const sh = 'scrollHeight';
-        const currentScrollPercent = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100) || 0;
+        const hScrollTop = h[st] || 0;
+        const bScrollTop = b[st] || 0;
+        const hScrollHeight = h[sh] || 0;
+        const bScrollHeight = b[sh] || 0;
+        const clientHeight = h.clientHeight || window.innerHeight || 0;
+        
+        const scrollDenom = (hScrollHeight || bScrollHeight || 0) - clientHeight;
+        const currentScrollPercent = scrollDenom > 0 ? Math.round((hScrollTop || bScrollTop) / scrollDenom * 100) : 0;
         
         if (currentScrollPercent > window.bidflow_metrics.maxScroll) {
           window.bidflow_metrics.maxScroll = currentScrollPercent;
@@ -410,11 +417,19 @@
       // Scroll Tracking
       function initScrollTracking() {
         window.addEventListener('scroll', () => {
-          const h = document.documentElement;
-          const b = document.body;
+          const h = document.documentElement || {};
+          const b = document.body || {};
           const st = 'scrollTop';
           const sh = 'scrollHeight';
-          const scrollPercent = Math.round((h[st] || b[st]) / ((h[sh] || b[sh]) - h.clientHeight) * 100);
+          const hScrollTop = h[st] || 0;
+          const bScrollTop = b[st] || 0;
+          const hScrollHeight = h[sh] || 0;
+          const bScrollHeight = b[sh] || 0;
+          const clientHeight = h.clientHeight || window.innerHeight || 0;
+          
+          const scrollDenom = (hScrollHeight || bScrollHeight || 0) - clientHeight;
+          const scrollPercent = scrollDenom > 0 ? Math.round((hScrollTop || bScrollTop) / scrollDenom * 100) : 0;
+          
           if (scrollPercent > window.bidflow_metrics.maxScroll) {
             window.bidflow_metrics.maxScroll = scrollPercent;
             sessionStorage.setItem('bf_scroll', window.bidflow_metrics.maxScroll);
