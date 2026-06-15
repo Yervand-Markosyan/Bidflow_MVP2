@@ -185,7 +185,9 @@ export const getBackendUrl = (endpoint: string): string => {
     const isLocalOrContainer = 
       hostname === 'localhost' || 
       hostname === '127.0.0.1' || 
-      hostname.includes('run.app');
+      hostname.includes('run.app') ||
+      hostname.includes('google') ||
+      hostname.includes('aistudio');
       
     if (!isLocalOrContainer) {
       // Points directly to Plesk persistent Node.js API subdomain
