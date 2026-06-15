@@ -39,6 +39,14 @@ try {
     log(`New deployment package detected in base64. Restoring...`);
     const base64Data = fs.readFileSync(base64File, 'utf8').trim();
     if (base64Data.length > 100) {
+      // Truncate/clear old logs for a completely fresh start
+      try {
+        if (fs.existsSync(logFile)) {
+          fs.writeFileSync(logFile, `[${new Date().toISOString()}] [Plesk app.js] Fresh installation starting with empty logs...\n`);
+          console.log("Truncated and cleared old server_log.txt for a fresh deployment session.");
+        }
+      } catch (e) {}
+
       const binaryBuffer = Buffer.from(base64Data, 'base64');
       fs.writeFileSync(zipFile, binaryBuffer);
       log(`Decoded ZIP package (${binaryBuffer.length} bytes). Unzipping...`);
