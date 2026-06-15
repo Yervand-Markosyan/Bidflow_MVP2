@@ -234,12 +234,12 @@ export const trackEvent = async (eventName: string, properties: TrackingProperti
   });
 
   if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    const blob = new Blob([payload], { type: 'application/json' });
+    const blob = new Blob([payload], { type: 'text/plain' });
     navigator.sendBeacon(BIDFLOW_API, blob);
   } else if (typeof fetch !== 'undefined') {
     fetch(BIDFLOW_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: payload,
       keepalive: true,
       mode: 'cors'
@@ -325,7 +325,7 @@ export const saveUserRegistration = async (userData: any) => {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'text/plain'
       },
       body: JSON.stringify(payload)
     });

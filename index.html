@@ -301,13 +301,13 @@
         const payload = JSON.stringify(event);
         if (navigator.sendBeacon) {
           try {
-            const blob = new Blob([payload], { type: 'application/json' });
+            const blob = new Blob([payload], { type: 'text/plain' });
             if (navigator.sendBeacon(BIDFLOW_API, blob)) return;
           } catch (e) {}
         }
         fetch(BIDFLOW_API, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: payload,
           keepalive: true,
           mode: 'cors',
