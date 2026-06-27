@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && node package_plesk.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:express --external:mysql2 --sourcemap --outfile=dist/server.cjs && node package_plesk.js",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit"
   },
