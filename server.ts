@@ -19,6 +19,18 @@ function setupFileLogging() {
     const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)).join(' ');
     const formatted = `[${timestamp}] [${level}] ${message}\n`;
     try {
+      if (fs.existsSync(logPath)) {
+        const stats = fs.statSync(logPath);
+        if (stats.size > 2 * 1024 * 1024) { // 2MB limit
+          try {
+            const bakFile = logPath + '.bak';
+            if (fs.existsSync(bakFile)) fs.unlinkSync(bakFile);
+            fs.renameSync(logPath, bakFile);
+          } catch (renameErr) {
+            fs.writeFileSync(logPath, ''); // truncate on failure
+          }
+        }
+      }
       fs.appendFileSync(logPath, formatted);
     } catch (e) {
       // Ignore

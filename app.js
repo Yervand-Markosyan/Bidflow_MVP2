@@ -9,6 +9,18 @@ const logFile = path.join(APP_ROOT, 'server_log.txt');
 function log(msg) {
   const line = `[${new Date().toISOString()}] [Plesk app.js] ${msg}\n`;
   try {
+    if (fs.existsSync(logFile)) {
+      const stats = fs.statSync(logFile);
+      if (stats.size > 2 * 1024 * 1024) { // 2MB limit
+        try {
+          const bakFile = logFile + '.bak';
+          if (fs.existsSync(bakFile)) fs.unlinkSync(bakFile);
+          fs.renameSync(logFile, bakFile);
+        } catch (renameErr) {
+          fs.writeFileSync(logFile, ''); // truncate on failure
+        }
+      }
+    }
     fs.appendFileSync(logFile, line);
   } catch (e) {}
   console.log(msg);
