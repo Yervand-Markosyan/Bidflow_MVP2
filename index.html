@@ -230,7 +230,21 @@
     <!-- Bidflow Tracking Script -->
     <script>
     (function() {
-      const BIDFLOW_API = "https://ais-pre-ntazh4dq53lpfbniqopixv-81264801679.europe-west3.run.app/api/track";
+      function getBackendUrl(endpoint) {
+        const hostname = window.location.hostname;
+        const isLocalOrContainer = 
+          hostname === 'localhost' || 
+          hostname === '127.0.0.1' || 
+          hostname.includes('run.app') ||
+          hostname.includes('google') ||
+          hostname.includes('aistudio');
+          
+        if (!isLocalOrContainer) {
+          return "https://api.bidflow.ae" + endpoint;
+        }
+        return endpoint;
+      }
+      const BIDFLOW_API = getBackendUrl('/api/events');
       const SESSION_START = Date.now();
       window.SESSION_START = SESSION_START;
       
