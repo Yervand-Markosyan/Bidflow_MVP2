@@ -15,7 +15,8 @@ try {
     'app_installer.js',
     '.npmrc',
     '.node-version',
-    '.env.example'
+    '.env.example',
+    'logs.php'
   ];
 
   // Add individual files if they exist

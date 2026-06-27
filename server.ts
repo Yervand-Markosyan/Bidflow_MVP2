@@ -158,69 +158,44 @@ async function initDatabasePool() {
         
         let activeConfig = { ...dbConfig };
         let connected = false;
-        
-        // 1. First connection try: Configured DB_HOST (82.192.72.152)
-        try {
-          console.log(`Testing connection candidate: Host=[${activeConfig.host}], User=[${activeConfig.user}]`);
-          const testConn = await mysql.createConnection({
-            host: activeConfig.host,
-            database: activeConfig.database,
-            user: activeConfig.user,
-            password: activeConfig.password,
-            port: activeConfig.port,
-            connectTimeout: 4000 // 4s timeout for fast fallback
-          });
-          await testConn.execute('SELECT 1');
-          await testConn.end();
-          connected = true;
-          console.log(`Database connection validated successfully for host: [${activeConfig.host}]`);
-        } catch (testErr: any) {
-          console.warn(`Connection test failed for candidate host [${activeConfig.host}]: ${testErr.message || testErr}`);
-          
-          const isAccessDenied = testErr.code === 'ER_ACCESS_DENIED_ERROR';
-          const isRefusedOrTimeout = testErr.code === 'ECONNREFUSED' || testErr.code === 'ETIMEDOUT';
-          
-          if (isAccessDenied || isRefusedOrTimeout) {
-            // 2. Second connection try (Self-healing Fallback to localhost)
-            console.log('Attempting self-healing fallback connection to Host=[localhost]...');
-            try {
-              const testConnLocal = await mysql.createConnection({
-                host: 'localhost',
-                database: activeConfig.database,
-                user: activeConfig.user,
-                password: activeConfig.password,
-                port: activeConfig.port,
-                connectTimeout: 4000
-              });
-              await testConnLocal.execute('SELECT 1');
-              await testConnLocal.end();
-              activeConfig.host = 'localhost';
-              connected = true;
-              console.log('Successfully validated self-healing fallback database connection on Host=[localhost]!');
-            } catch (localErr: any) {
-              console.warn(`Fallback connection to Host=[localhost] also failed: ${localErr.message || localErr}`);
-              
-              // 3. Third connection try (Last-resort fallback to 127.0.0.1 loopback)
-              console.log('Attempting last-resort fallback connection to Host=[127.0.0.1]...');
-              try {
-                const testConnLocalIp = await mysql.createConnection({
-                  host: '127.0.0.1',
-                  database: activeConfig.database,
-                  user: activeConfig.user,
-                  password: activeConfig.password,
-                  port: activeConfig.port,
-                  connectTimeout: 4000
-                });
-                await testConnLocalIp.execute('SELECT 1');
-                await testConnLocalIp.end();
-                activeConfig.host = '127.0.0.1';
-                connected = true;
-                console.log('Successfully validated last-resort database connection on Host=[127.0.0.1]!');
-              } catch (localIpErr: any) {
-                console.error('All DB connection candidates (configured host, localhost, 127.0.0.1) failed. Proceeding with configured host pool.');
-              }
-            }
+
+        // Sequence of host candidates to try: starting with the configured host, falling back to public IP, localhost, and loopback IPs
+        const baseCandidates = [
+          dbConfig.host,
+          '82.192.72.152',
+          'localhost',
+          '127.0.0.1'
+        ];
+        // Deduplicate candidates preserving order
+        const candidates = Array.from(new Set(baseCandidates.filter(Boolean)));
+
+        console.log('Database connection candidates in order:', candidates);
+
+        for (const candidate of candidates) {
+          try {
+            console.log(`Testing connection candidate: Host=[${candidate}], User=[${activeConfig.user}]`);
+            const testConn = await mysql.createConnection({
+              host: candidate,
+              database: activeConfig.database,
+              user: activeConfig.user,
+              password: activeConfig.password,
+              port: activeConfig.port,
+              connectTimeout: 4000 // 4s timeout for fast fallback
+            });
+            await testConn.execute('SELECT 1');
+            await testConn.end();
+            
+            activeConfig.host = candidate;
+            connected = true;
+            console.log(`Database connection validated successfully for host: [${candidate}]`);
+            break;
+          } catch (testErr: any) {
+            console.warn(`Connection test failed for host [${candidate}]: ${testErr.message || testErr}`);
           }
+        }
+
+        if (!connected) {
+          console.error('All DB connection candidates failed. Proceeding with default host in pool config.');
         }
 
         console.log(`Initializing final MariaDB connection pool with host: [${activeConfig.host}]`);
